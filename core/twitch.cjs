@@ -166,6 +166,8 @@ class Twitch {
         { id: r.remoteId },
         { is_paused: true },
       );
+      this.store.putReward({ ...r, paused: true });
+      this.changed();
       const pending = await this.request(
         "GET",
         "channel_points/custom_rewards/redemptions",

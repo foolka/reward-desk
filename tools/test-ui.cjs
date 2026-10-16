@@ -149,6 +149,7 @@ const errors = [];
   await page.locator(`[data-id="${audio.id}"]`).click();
   await page.evaluate((file) => addFiles([file]), wav);
   assert.equal(await page.locator(".media-row").count(), 2);
+  assert.equal(await page.locator("#media-mode").textContent(), "Рулетка");
   await page.locator("[data-weight]").nth(1).fill("3");
   assert.deepEqual(await page.locator(".chance").allTextContents(), [
     "25.0%",
@@ -161,6 +162,24 @@ const errors = [];
         .length === 2,
     audio.id,
   );
+  const recoverySeed = new Store(profile);
+  recoverySeed.putReward({
+    ...recoverySeed.reward(audio.id),
+    sync: "creating",
+  });
+  recoverySeed.close();
+  await page.evaluate(() => command("state"));
+  await page.locator("#publish").click();
+  await page.waitForFunction(() =>
+    document
+      .querySelector("#toast")
+      .textContent.includes("Twitch отключён в тестовом режиме"),
+  );
+  const restoreSeed = new Store(profile);
+  restoreSeed.putReward({ ...restoreSeed.reward(audio.id), sync: "draft" });
+  restoreSeed.close();
+  await page.evaluate(() => command("state"));
+  await page.locator("#toast").waitFor({ state: "hidden" });
   await page.screenshot({
     path: path.join(screenshots, "audio-editor.png"),
     fullPage: true,

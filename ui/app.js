@@ -107,7 +107,7 @@ function renderEditor() {
   <div class="switches">${check("enabled", "Доступна в Twitch")}${check("paused", "На паузе")}${check("input", "Сообщение зрителя")}</div>
   <div class="limits">${limit("streamLimit", "Лимит за эфир", 1000000000)}${limit("userLimit", "На одного зрителя", 1000000000)}${limit("cooldown", "Перезарядка, сек.", 604800)}</div>
   <div class="switches">${check("skipQueue", "Сразу завершать покупку в Twitch")}</div><div id="skip-warning" class="notice" ${draft.skipQueue ? "" : "hidden"}>При мгновенном завершении Twitch не позволяет вернуть баллы. Покупки во время отключения приложения могут быть пропущены.</div>
-  <section class="editor-section"><div class="section-head"><h3>${video ? "Видео" : "Звуки"} <span class="muted" id="media-count"></span></h3><span class="muted">${draft.items.length > 1 ? "Рулетка" : "Один файл"}</span></div><div id="media-list" class="media-list"></div><div id="drop-zone" class="drop-zone"><button id="add-files">${icon("upload")}Добавить файлы</button><span class="formats">${video ? "MP4 · WebM" : "MP3 · WAV · OGG · M4A · FLAC"}</span></div></section>
+  <section class="editor-section"><div class="section-head"><h3>${video ? "Видео" : "Звуки"} <span class="muted" id="media-count"></span></h3><span class="muted" id="media-mode"></span></div><div id="media-list" class="media-list"></div><div id="drop-zone" class="drop-zone"><button id="add-files">${icon("upload")}Добавить файлы</button><span class="formats">${video ? "MP4 · WebM" : "MP3 · WAV · OGG · M4A · FLAC"}</span></div></section>
   ${video ? `<section class="editor-section"><div class="section-head"><h3>Размещение видео</h3><select id="position-mode" aria-label="Размещение" style="width:190px"><option value="fixed">Фиксированная область</option><option value="random">Случайное место</option></select></div><div class="preview-layout"><div><div id="stage" class="stage"><div id="placement" class="placement">${icon("move")}</div></div><div class="stage-caption"><span>1920 × 1080</span><span id="coordinates"></span></div></div><div class="video-controls">${vnum("width", "Макс. ширина", 40, 1920)}${vnum("height", "Макс. высота", 40, 1080)}${vnum("x", "X", 0, 1920)}${vnum("y", "Y", 0, 1080)}${vnum("border", "Толщина рамки", 0, 40)}<label>Стиль рамки<select id="border-style"><option value="solid">Сплошная</option><option value="dashed">Пунктир</option><option value="dotted">Точки</option><option value="double">Двойная</option><option value="none">Без рамки</option></select></label>${vnum("radius", "Скругление", 0, 200)}<label>Цвет рамки<input type="color" id="border-color" value="${draft.video.color}"></label><label class="check wide"><input type="checkbox" id="tilt" ${draft.video.angle ? "checked" : ""}>Случайный наклон</label><label class="wide">Максимальный угол, ±°<input id="angle" type="range" min="0" max="45" value="${draft.video.angle}"><output id="angle-value">${draft.video.angle}°</output></label></div></div></section>` : ""}
   <div class="save-footer"><button id="save" class="primary">${icon("save")}Сохранить</button><button id="publish">${icon("cloud-upload")}${draft.remoteId ? "Синхронизировать" : "Создать в Twitch"}</button></div>`;
   $$("[data-field]").forEach((el) =>
@@ -133,7 +133,7 @@ function renderEditor() {
   );
   act($("#save"), save);
   act($("#publish"), async () => {
-    await save();
+    if (draft.sync !== "creating") await save();
     await command("publish", selected);
     select(selected);
     toast("Награда синхронизирована");
@@ -197,6 +197,12 @@ async function addFiles(paths) {
   updatePlacement();
 }
 function renderMedia() {
+  $("#media-mode").textContent =
+    draft.items.length > 1
+      ? "Рулетка"
+      : draft.items.length
+        ? "Один файл"
+        : "Нет файлов";
   $("#media-count").textContent = draft.items.length
     ? "· " + draft.items.length
     : "";
