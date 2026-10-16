@@ -1,0 +1,372 @@
+const {
+  app,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  shell,
+  safeStorage,
+  clipboard,
+  Tray,
+  Menu,
+  nativeImage,
+} = require("electron");
+const fs = require("node:fs");
+const path = require("node:path");
+const { Store, importMedia } = require("./core/store.cjs");
+const { initialReward, integer } = require("./core/model.cjs");
+const { Engine } = require("./core/engine.cjs");
+const { Overlay } = require("./core/overlay.cjs");
+const { TwitchAuth, safeError } = require("./core/twitch-auth.cjs");
+const { Twitch } = require("./core/twitch.cjs");
+const test = process.argv.includes("--test-mode");
+if (process.env.REWARD_DESK_TEST_DATA && test)
+  app.setPath("userData", path.resolve(process.env.REWARD_DESK_TEST_DATA));
+else app.setPath("userData", path.join(app.getPath("appData"), "RewardDesk"));
+app.setAppUserModelId("com.fermionaplay.rewarddesk");
+const primary = app.requestSingleInstanceLock();
+if (!primary) app.quit();
+let win,
+  tray,
+  store,
+  engine,
+  overlay,
+  auth,
+  twitch,
+  closing = false,
+  serial = Promise.resolve();
+const root = app.getPath("userData");
+function privateSave(name, value) {
+  if (!safeStorage.isEncryptionAvailable())
+    throw Error("Защищённое хранилище Windows недоступно");
+  const file = path.join(root, name);
+  const data = safeStorage.encryptString(JSON.stringify(value));
+  fs.writeFileSync(file + ".tmp", data);
+  fs.renameSync(file + ".tmp", file);
+}
+function privateLoad(name) {
+  const file = path.join(root, name);
+  if (!fs.existsSync(file)) return null;
+  try {
+    return JSON.parse(safeStorage.decryptString(fs.readFileSync(file)));
+  } catch {
+    throw Error(
+      "Не удалось открыть сохранённый вход. Файл не изменён: " + name,
+    );
+  }
+}
+function snapshot() {
+  return {
+    version: app.getVersion(),
+    rewards: store.rewards(),
+    media: store.all("media"),
+    jobs: store.jobs().slice(-500).reverse(),
+    logs: store.logs(),
+    auth: auth.view(),
+    clientId: store.meta("clientId", require("./twitch-client.json").clientId),
+    twitch: twitch.status,
+    overlay: overlay.view(),
+    paused: store.meta("paused", false),
+    dataPath: root,
+    test,
+  };
+}
+function changed() {
+  if (win && !win.isDestroyed() && !closing)
+    win.webContents.send("state", snapshot());
+}
+function show() {
+  win.show();
+  if (win.isMinimized()) win.restore();
+  win.focus();
+}
+app.on("second-instance", () => {
+  if (win) show();
+});
+app
+  .whenReady()
+  .then(async () => {
+    if (!primary) return;
+    fs.mkdirSync(root, { recursive: true });
+    store = new Store(root);
+    const { backup } = require("node:sqlite");
+    const backups = path.join(root, "backups");
+    fs.mkdirSync(backups, { recursive: true });
+    await backup(store.db, path.join(backups, `startup-${Date.now()}.sqlite`));
+    engine = new Engine(store, changed);
+    auth = new TwitchAuth({
+      saved: privateLoad("auth.bin"),
+      save: (v) => privateSave("auth.bin", v),
+      pending: privateLoad("auth-pending.bin"),
+      savePending: (v) => privateSave("auth-pending.bin", v),
+    });
+    twitch = new Twitch({ auth, store, engine, changed });
+    overlay = new Overlay({
+      store,
+      engine,
+      account: () => auth.saved?.user.id || "",
+      changed,
+    });
+    const port = test
+      ? Number(process.env.REWARD_DESK_TEST_PORT || 0)
+      : store.meta("port", 18874);
+    overlay.port = port;
+    try {
+      await overlay.start(port);
+    } catch (e) {
+      overlay.error = `Порт ${port} недоступен (${e.code}). Освободите его или измените порт в подключении.`;
+      store.log(overlay.error);
+    }
+    auth.on("change", changed);
+    auth.on("authorized", () => {
+      if (!test) void twitch.connect();
+    });
+    auth.on("expired", () => {
+      twitch.stop();
+      changed();
+    });
+    const icon = path.join(__dirname, "assets/icon.png");
+    win = new BrowserWindow({
+      width: 1240,
+      height: 860,
+      minWidth: 760,
+      minHeight: 560,
+      title: "Reward Desk",
+      backgroundColor: "#eef1f1",
+      icon: fs.existsSync(icon) ? icon : undefined,
+      webPreferences: {
+        preload: path.join(__dirname, "preload.cjs"),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        autoplayPolicy: "no-user-gesture-required",
+      },
+    });
+    win.setMenu(null);
+    win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    win.webContents.on("will-navigate", (e) => e.preventDefault());
+    if (fs.existsSync(icon)) {
+      tray = new Tray(
+        nativeImage.createFromPath(icon).resize({ width: 24, height: 24 }),
+      );
+      tray.setToolTip("Reward Desk");
+      tray.setContextMenu(
+        Menu.buildFromTemplate([
+          { label: "Открыть Reward Desk", click: show },
+          { label: "Выход", click: () => app.quit() },
+        ]),
+      );
+      tray.on("double-click", show);
+      win.on("close", (e) => {
+        if (!closing && !test) {
+          e.preventDefault();
+          win.hide();
+        }
+      });
+    }
+    ipcMain.handle("command", (event, command, arg) => {
+      if (
+        event.sender !== win.webContents ||
+        event.senderFrame !== win.webContents.mainFrame
+      )
+        throw Error("Недопустимый источник команды");
+      if (command === "state") return snapshot();
+      const pending = serial.then(() => execute(command, arg));
+      serial = pending.catch(() => {});
+      return pending;
+    });
+    await win.loadFile(path.join(__dirname, "ui/index.html"));
+    if (!test) {
+      auth.resume();
+      void twitch.connect();
+    }
+    setInterval(changed, 3000).unref();
+  })
+  .catch((error) => {
+    dialog.showErrorBox(
+      "Reward Desk",
+      "Запуск остановлен. Данные сохранены.\n" + error.message,
+    );
+    app.exit(1);
+  });
+async function execute(command, arg) {
+  switch (command) {
+    case "new":
+      store.putReward({
+        ...initialReward(arg === "video" ? "video" : "audio"),
+        createdAt: Date.now(),
+      });
+      break;
+    case "save": {
+      const prior = store.reward(arg.id);
+      if (prior?.sync === "creating")
+        throw Error("Сначала восстановите связь с Twitch кнопкой создания");
+      const r = store.saveReward(arg);
+      if (r.remoteId) {
+        store.putReward({ ...r, sync: "pending" });
+        if (!test) await twitch.publish(r.id);
+      }
+      break;
+    }
+    case "publish":
+      if (test) throw Error("Twitch отключён в тестовом режиме");
+      await twitch.publish(arg);
+      break;
+    case "remove": {
+      const r = store.reward(arg);
+      if (!r) break;
+      const answer = await dialog.showMessageBox(win, {
+        type: "warning",
+        message: `Удалить «${r.title}»${r.remoteId ? " и её награду в Twitch" : ""}?`,
+        detail: "История и копии медиа сохранятся.",
+        buttons: ["Отмена", "Удалить"],
+        defaultId: 0,
+        cancelId: 0,
+      });
+      if (answer.response === 1) await twitch.remove(arg);
+      break;
+    }
+    case "import": {
+      const r = store.reward(arg.id);
+      if (!r) throw Error("Выберите награду");
+      let files = arg.paths;
+      if (!files) {
+        const pick = await dialog.showOpenDialog(win, {
+          properties: ["openFile", "multiSelections"],
+          filters: [
+            {
+              name: r.kind === "video" ? "Видео" : "Аудио",
+              extensions:
+                r.kind === "video"
+                  ? ["mp4", "webm"]
+                  : ["mp3", "wav", "ogg", "m4a", "flac"],
+            },
+          ],
+        });
+        files = pick.canceled ? [] : pick.filePaths;
+      }
+      if (!Array.isArray(files) || files.length > 200)
+        throw Error("Не больше 200 файлов");
+      const imported = [];
+      for (const file of files) imported.push(importMedia(store, file, r.kind));
+      changed();
+      return imported;
+    }
+    case "test": {
+      const r = store.reward(arg.id);
+      if (!r) throw Error("Награда не найдена");
+      engine.enqueue(r, null, arg.itemId || null);
+      break;
+    }
+    case "pause":
+      store.setMeta("paused", !!arg);
+      break;
+    case "stop": {
+      const j = engine.playing();
+      if (j) {
+        overlay.stopPlayback();
+        engine.finish(j.id, false, "Остановлено вручную");
+      }
+      break;
+    }
+    case "retry":
+      engine.retry(arg);
+      break;
+    case "cancel":
+      engine.cancel(arg);
+      break;
+    case "copy-url":
+      clipboard.writeText(overlay.url());
+      return;
+    case "preview": {
+      const p = new BrowserWindow({
+        width: 960,
+        height: 580,
+        title: "Reward Desk · OBS",
+        backgroundColor: "#d8dddd",
+        parent: win,
+        webPreferences: {
+          sandbox: true,
+          contextIsolation: true,
+          nodeIntegration: false,
+          autoplayPolicy: "no-user-gesture-required",
+        },
+      });
+      p.setMenu(null);
+      p.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+      p.webContents.on("will-navigate", (e) => e.preventDefault());
+      await p.loadURL(overlay.url());
+      return;
+    }
+    case "port": {
+      const port = integer(arg, 1024, 65535, "Порт");
+      if (port === overlay.port && !overlay.error) break;
+      if (engine.playing()) throw Error("Дождитесь завершения воспроизведения");
+      const next = new Overlay({
+        store,
+        engine,
+        account: () => auth.saved?.user.id || "",
+        changed,
+      });
+      await next.start(port);
+      overlay.close();
+      overlay = next;
+      store.setMeta("port", port);
+      break;
+    }
+    case "login": {
+      if (test) throw Error("Twitch отключён в тестовом режиме");
+      if (engine.playing()) throw Error("Дождитесь конца воспроизведения");
+      twitch.stop();
+      store.setMeta("clientId", arg);
+      await auth.start(arg);
+      if (auth.pending) await shell.openExternal(auth.pending.url);
+      break;
+    }
+    case "cancel-login":
+      auth.cancel();
+      break;
+    case "copy-code":
+      if (auth.pending) clipboard.writeText(auth.pending.userCode);
+      return;
+    case "logout": {
+      if (engine.playing()) throw Error("Дождитесь конца воспроизведения");
+      const answer = await dialog.showMessageBox(win, {
+        message: "Выйти из Twitch?",
+        detail: "Награды и файлы останутся в приложении.",
+        buttons: ["Отмена", "Выйти"],
+        defaultId: 0,
+        cancelId: 0,
+      });
+      if (answer.response === 1) {
+        twitch.stop();
+        auth.logout();
+      }
+      break;
+    }
+    case "reconnect":
+      if (!test) void twitch.connect();
+      break;
+    case "folder":
+      await shell.openPath(root);
+      return;
+    case "quit":
+      app.quit();
+      return;
+    default:
+      throw Error("Неизвестная команда");
+  }
+  changed();
+  return snapshot();
+}
+app.on("before-quit", () => {
+  if (closing) return;
+  closing = true;
+  twitch?.close();
+  auth?.dispose();
+  overlay?.close();
+  tray?.destroy();
+  store?.close();
+});
+app.on("window-all-closed", () => {
+  if (!tray) app.quit();
+});

@@ -1,0 +1,31 @@
+{
+  "name": "reward-desk",
+  "productName": "Reward Desk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Direct Twitch sound and video rewards for OBS",
+  "author": "FermionaPlay",
+  "license": "GPL-2.0-or-later",
+  "main": "main.cjs",
+  "engines": {
+    "node": ">=24.14.0 <25"
+  },
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test tests/*.test.cjs",
+    "test:ui": "node tools/test-ui.cjs",
+    "build": "node tools/build.cjs",
+    "installer": "node tools/build-installer.cjs"
+  },
+  "dependencies": {
+    "@twurple/api": "8.2.0",
+    "@twurple/auth": "8.2.0",
+    "@twurple/eventsub-ws": "8.2.0",
+    "lucide": "0.468.0"
+  },
+  "devDependencies": {
+    "electron": "42.11.8",
+    "@electron/packager": "20.3.0",
+    "playwright": "1.58.2"
+  }
+}

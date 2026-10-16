@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: http://127.0.0.1:*; media-src 'self' http://127.0.0.1:*; connect-src 'none'; object-src 'none'"
+    />
+    <title>Reward Desk</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">
+        <i data-lucide="clapperboard"></i>
+        <h1>Reward Desk</h1>
+        <span class="version">PRIVATE 0.1</span>
+      </div>
+      <div class="connection">
+        <span id="connection-dot" class="dot"></span
+        ><span id="connection-text">Twitch не подключён</span>
+      </div>
+    </header>
+    <nav class="top-nav">
+      <button data-tab="rewards" class="active">
+        <i data-lucide="gift"></i>Награды</button
+      ><button data-tab="queue">
+        <i data-lucide="list-video"></i>Очередь
+        <span id="queue-count">0</span></button
+      ><button data-tab="settings">
+        <i data-lucide="settings-2"></i>Подключение
+      </button>
+      <div class="nav-spacer"></div>
+      <button id="pause" title="Пауза очереди">
+        <i data-lucide="pause"></i></button
+      ><button id="stop" title="Остановить текущую награду">
+        <i data-lucide="square"></i>
+      </button>
+    </nav>
+    <main>
+      <section id="tab-rewards" class="workspace">
+        <aside>
+          <div class="aside-head">
+            <h2>Мои награды</h2>
+            <span id="reward-count">0</span>
+          </div>
+          <div class="create-row">
+            <button id="new-audio"><i data-lucide="audio-lines"></i>Звук</button
+            ><button id="new-video"><i data-lucide="film"></i>Видео</button>
+          </div>
+          <input
+            id="search"
+            type="search"
+            placeholder="Поиск награды"
+            aria-label="Поиск награды"
+          />
+          <div id="reward-list"></div>
+        </aside>
+        <div id="editor">
+          <div class="empty">
+            <i data-lucide="gift"></i>
+            <h2>Нет выбранной награды</h2>
+            <button id="first-create" class="primary">
+              <i data-lucide="plus"></i>Создать награду
+            </button>
+          </div>
+        </div>
+      </section>
+      <section id="tab-queue" hidden>
+        <div class="section-head">
+          <h2>Очередь и история</h2>
+          <span id="queue-status"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Время</th>
+                <th>Зритель / награда</th>
+                <th>Файл</th>
+                <th>Статус</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="jobs"></tbody>
+          </table>
+        </div>
+      </section>
+      <section id="tab-settings" hidden>
+        <div class="settings-grid">
+          <div>
+            <h2>Twitch</h2>
+            <div id="auth-state"></div>
+            <label
+              >Client ID<input
+                id="client-id"
+                autocomplete="off"
+                spellcheck="false"
+            /></label>
+            <div class="button-row">
+              <button id="login" class="primary">
+                <i data-lucide="log-in"></i>Войти через Twitch</button
+              ><button id="logout"><i data-lucide="log-out"></i>Выйти</button
+              ><button id="reconnect" title="Переподключить Twitch">
+                <i data-lucide="refresh-cw"></i>
+              </button>
+            </div>
+            <div id="login-pending" hidden>
+              <strong id="login-code"></strong
+              ><button id="copy-code" title="Скопировать код">
+                <i data-lucide="copy"></i></button
+              ><button id="cancel-login">Отмена</button>
+            </div>
+          </div>
+          <div>
+            <h2>Источник OBS</h2>
+            <label
+              >URL
+              <div class="input-action">
+                <input id="overlay-url" readonly /><button
+                  id="copy-url"
+                  title="Скопировать URL"
+                >
+                  <i data-lucide="copy"></i>
+                </button></div
+            ></label>
+            <div class="source-meta">
+              <span>1920 × 1080</span><span id="obs-status"></span>
+            </div>
+            <div id="overlay-error" class="notice" hidden></div>
+            <div class="port-row">
+              <label
+                >Порт<input
+                  id="port"
+                  type="number"
+                  min="1024"
+                  max="65535" /></label
+              ><button id="save-port" title="Сохранить порт">
+                <i data-lucide="save"></i></button
+              ><button id="preview">
+                <i data-lucide="monitor-play"></i>Предпросмотр
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="section-head">
+          <h2>Диагностика</h2>
+          <button id="folder">
+            <i data-lucide="folder-open"></i>Папка данных
+          </button>
+        </div>
+        <div id="logs"></div>
+      </section>
+    </main>
+    <div id="toast" role="status" hidden></div>
+    <script src="../node_modules/lucide/dist/umd/lucide.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

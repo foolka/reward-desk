@@ -1,0 +1,12 @@
+node_modules/
+release/
+.deps/
+test-results/
+test-data/
+*.sqlite*
+*.log
+.env*
+auth*.json
+*.bin
+data/
+private/

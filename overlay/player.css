@@ -1,0 +1,37 @@
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+#stage {
+  position: absolute;
+  width: 1920px;
+  height: 1080px;
+  transform-origin: top left;
+}
+.clip {
+  position: absolute;
+  box-sizing: border-box;
+  object-fit: contain;
+  background: transparent;
+  animation: appear 0.18s ease-out;
+}
+.clip.leaving {
+  animation: leave 0.18s ease-in forwards;
+}
+@keyframes appear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes leave {
+  to {
+    opacity: 0;
+  }
+}
