@@ -30,6 +30,7 @@ const icons = () => {
 };
 let state,
   selected = "",
+  previewItemId = "",
   draft,
   dirty = false,
   draftTimer,
@@ -360,7 +361,13 @@ async function save() {
 }
 async function addFiles(paths) {
   const added = await command("import", { id: selected, paths });
-  for (const m of added) draft.items.push({ id: m.id, volume: 80, weight: 1 });
+  for (const m of added)
+    draft.items.push({
+      id: m.id,
+      volume: 80,
+      weight: 1,
+      ...(draft.kind === "video" ? { captionText: "" } : {}),
+    });
   markDirty();
   renderMedia();
   updatePlacement();
@@ -378,11 +385,18 @@ function renderMedia() {
   $("#media-list").innerHTML = draft.items
     .map((i) => {
       const m = state.media.find((m) => m.id === i.id);
-      return `<div class="media-row" data-item="${i.id}"><div class="media-name">${esc(m?.name || "Файл отсутствует")}<small>${((m?.size || 0) / 1024 / 1024).toFixed(1)} МБ</small></div><div class="media-volume"><input data-volume type="range" min="0" max="100" value="${i.volume}" aria-label="Громкость ${esc(m?.name)}"><output class="volume-value">${i.volume}%</output></div><input data-weight type="number" min="0" max="10000" step="1" value="${i.weight}" aria-label="Вес ${esc(m?.name)}"><span class="chance"></span><button data-play title="Тест файла в OBS">${icon("play")}</button><button data-remove class="danger" title="Убрать файл">${icon("x")}</button></div>`;
+      return `<div class="media-row" data-item="${i.id}"><div class="media-file"><div class="media-name">${esc(m?.name || "Файл отсутствует")}<small>${((m?.size || 0) / 1024 / 1024).toFixed(1)} МБ</small></div>${draft.kind === "video" ? `<button data-caption-edit title="Текст этого ролика" aria-label="Текст ролика ${esc(m?.name)}">${icon("captions")}</button>` : ""}</div><div class="media-volume"><input data-volume type="range" min="0" max="100" value="${i.volume}" aria-label="Громкость ${esc(m?.name)}"><output class="volume-value">${i.volume}%</output></div><input data-weight type="number" min="0" max="10000" step="1" value="${i.weight}" aria-label="Вес ${esc(m?.name)}"><span class="chance"></span><button data-play title="Тест файла в OBS">${icon("play")}</button><button data-remove class="danger" title="Убрать файл">${icon("x")}</button></div>`;
     })
     .join("");
   $$(".media-row").forEach((row) => {
     const i = draft.items.find((i) => i.id === row.dataset.item);
+    if (draft.kind === "video")
+      act(row.querySelector("[data-caption-edit]"), () => {
+        previewItemId = i.id;
+        refreshCaptionItems();
+        updatePlacement();
+        $("#caption-text").focus();
+      });
     row.querySelector("[data-volume]").addEventListener("input", (e) => {
       const item = draft.items.find((item) => item.id === row.dataset.item);
       item.volume = Number(e.target.value);
@@ -409,7 +423,32 @@ function renderMedia() {
     });
   });
   percentages();
+  refreshCaptionItems();
   icons();
+}
+function previewItem() {
+  const item =
+    draft.items.find((item) => item.id === previewItemId) || draft.items[0];
+  previewItemId = item?.id || "";
+  return item;
+}
+function refreshCaptionItems() {
+  if (draft.kind !== "video" || !$("#caption-item")) return;
+  const item = previewItem();
+  $("#caption-item").innerHTML = draft.items.length
+    ? draft.items
+        .map(
+          (i) =>
+            `<option value="${esc(i.id)}">${esc(state.media.find((m) => m.id === i.id)?.name || "Файл отсутствует")}</option>`,
+        )
+        .join("")
+    : '<option value="">Нет видео</option>';
+  $("#caption-item").value = previewItemId;
+  $("#caption-item").disabled = !item;
+  $("#caption-text").value = item
+    ? RewardCaption.forItem(draft.video, item).caption.text
+    : "";
+  $("#caption-text").disabled = !item;
 }
 function percentages() {
   const heading = $("#chance-heading");
@@ -427,6 +466,38 @@ function percentages() {
   });
 }
 function bindVideo() {
+  $("#caption-item").addEventListener("change", (event) => {
+    previewItemId = event.target.value;
+    refreshCaptionItems();
+    updatePlacement();
+  });
+  $("#caption-text").addEventListener("input", (event) => {
+    const item = previewItem();
+    if (!item) return;
+    item.captionText = event.target.value;
+    markDirty();
+    updatePlacement();
+  });
+  for (const button of $$("[data-text-anchor]"))
+    button.addEventListener("click", () => {
+      const kind = button.dataset.textKind;
+      draft.video[kind] ||= {
+        ...(kind === "caption"
+          ? RewardCaption.defaults
+          : RewardCaption.durationDefaults),
+      };
+      Object.assign(draft.video[kind], {
+        anchor: button.dataset.textAnchor,
+        x: 0,
+        y: 0,
+      });
+      for (const option of $$(`[data-text-kind="${kind}"]`))
+        option.setAttribute("aria-pressed", String(option === button));
+      $(`#${kind}-x`).value = 0;
+      $(`#${kind}-y`).value = 0;
+      markDirty();
+      updatePlacement();
+    });
   for (const el of $$("[data-caption]"))
     el.addEventListener("input", () => {
       draft.video.caption ||= { ...RewardCaption.defaults };
@@ -446,6 +517,8 @@ function bindVideo() {
             : el.value;
       for (const input of $$("[data-duration]:not([type=checkbox])"))
         input.disabled = !draft.video.duration.enabled;
+      for (const button of $$('[data-text-kind="duration"]'))
+        button.disabled = !draft.video.duration.enabled;
       markDirty();
       updatePlacement();
     });
@@ -518,7 +591,8 @@ function updatePlacement() {
   const v = draft.video,
     p = $("#placement"),
     scale = $("#stage").getBoundingClientRect().width / 1920;
-  const first = draft.items[0]?.id || "";
+  const item = previewItem();
+  const first = item?.id || "";
   if (p.dataset.media !== first) {
     p.querySelector("video")?.remove();
     p.dataset.media = first;
@@ -550,30 +624,57 @@ function updatePlacement() {
     border: `${frame.border * scale}px ${v.borderStyle} ${v.color}`,
     borderRadius: v.radius * scale + "px",
   });
-  RewardCaption.renderAll(p, draft.video, video?.duration, scale);
+  RewardCaption.renderAll(
+    p,
+    RewardCaption.forItem(draft.video, item),
+    video?.duration,
+    scale,
+  );
   $("#coordinates").textContent =
     `${Math.round(frame.x)}, ${Math.round(frame.y)} · ${Math.round(frame.width)} × ${Math.round(frame.height)}`;
   for (const key of ["x", "y"])
     if (document.activeElement !== $(`[data-video="${key}"]`))
       $(`[data-video="${key}"]`).value = v[key];
 }
+function textPlacementMarkup(kind, value, disabled = false) {
+  const labels = [
+    "Сверху слева",
+    "Сверху по центру",
+    "Сверху справа",
+    "По центру слева",
+    "По центру",
+    "По центру справа",
+    "Снизу слева",
+    "Снизу по центру",
+    "Снизу справа",
+  ];
+  const symbols = [
+    "arrow-up-left",
+    "arrow-up",
+    "arrow-up-right",
+    "arrow-left",
+    "dot",
+    "arrow-right",
+    "arrow-down-left",
+    "arrow-down",
+    "arrow-down-right",
+  ];
+  return `<div class="text-placement"><div><div class="anchor-label">Положение<button type="button" class="option-help" data-help="captionAnchor" aria-label="О положении текста">${icon("circle-help")}</button></div><div class="text-anchor-grid" role="group" aria-label="${kind === "caption" ? "Положение подписи" : "Положение длительности"}">${RewardCaption.anchors.map((anchor, i) => `<button type="button" data-text-kind="${kind}" data-text-anchor="${anchor}" aria-label="${labels[i]}" title="${labels[i]}" aria-pressed="${(value.anchor || RewardCaption.defaults.anchor) === anchor}" ${disabled ? "disabled" : ""}>${icon(symbols[i])}</button>`).join("")}</div></div><label>Смещение X<input id="${kind}-x" data-${kind}="x" type="number" min="-1920" max="1920" value="${value.x}" ${disabled ? "disabled" : ""}></label><label>Смещение Y<input id="${kind}-y" data-${kind}="y" type="number" min="-1080" max="1080" value="${value.y}" ${disabled ? "disabled" : ""}></label></div>`;
+}
 function captionMarkup() {
   const c = draft.video.caption || RewardCaption.defaults;
   const d = draft.video.duration || RewardCaption.durationDefaults;
   return `<section class="editor-section"><div class="section-head"><h3>Текст на видео</h3></div><div class="caption-fields">
-  <label class="wide">Текст<textarea id="caption-text" data-caption="text" maxlength="300" rows="2" placeholder="Без надписи">${esc(c.text)}</textarea></label>
+  <label class="wide">Ролик<select id="caption-item"></select></label>
+  <label class="wide">Текст ролика<textarea id="caption-text" maxlength="300" rows="2" placeholder="Без надписи"></textarea></label>
   <label>Шрифт<select id="caption-font" data-caption="font">${RewardCaption.fonts.map((font) => `<option ${font === c.font ? "selected" : ""}>${esc(font)}</option>`).join("")}</select></label>
   <label>Размер, px<input id="caption-size" data-caption="size" type="number" min="8" max="200" value="${c.size}"></label>
   <label>Цвет<input id="caption-color" data-caption="color" type="color" value="${esc(c.color)}"></label>
-  <label>Смещение X<input id="caption-x" data-caption="x" type="number" min="-1920" max="1920" value="${c.x}"></label>
-  <label>Смещение Y<input id="caption-y" data-caption="y" type="number" min="-1080" max="1080" value="${c.y}"></label>
-  </div><div class="duration-options"><label class="check"><input id="duration-enabled" data-duration="enabled" type="checkbox" ${d.enabled ? "checked" : ""}>Показывать длительность видео</label><div class="caption-fields">
+  </div>${textPlacementMarkup("caption", c)}<div class="duration-options"><label class="check"><input id="duration-enabled" data-duration="enabled" type="checkbox" ${d.enabled ? "checked" : ""}>Показывать длительность видео</label><div class="caption-fields">
   <label>Шрифт<select id="duration-font" data-duration="font" ${d.enabled ? "" : "disabled"}>${RewardCaption.fonts.map((font) => `<option ${font === d.font ? "selected" : ""}>${esc(font)}</option>`).join("")}</select></label>
   <label>Размер, px<input id="duration-size" data-duration="size" type="number" min="8" max="200" value="${d.size}" ${d.enabled ? "" : "disabled"}></label>
   <label>Цвет<input id="duration-color" data-duration="color" type="color" value="${esc(d.color)}" ${d.enabled ? "" : "disabled"}></label>
-  <label>Смещение X<input id="duration-x" data-duration="x" type="number" min="-1920" max="1920" value="${d.x}" ${d.enabled ? "" : "disabled"}></label>
-  <label>Смещение Y<input id="duration-y" data-duration="y" type="number" min="-1080" max="1080" value="${d.y}" ${d.enabled ? "" : "disabled"}></label>
-  </div></div></section>`;
+  </div>${textPlacementMarkup("duration", d, !d.enabled)}</div></section>`;
 }
 function renderStatus() {
   $(".version").textContent = "PRIVATE " + state.version;
@@ -658,6 +759,7 @@ $$("[data-tab]").forEach((el) =>
     $$("[data-tab]").forEach((b) => b.classList.toggle("active", b === el));
     for (const name of ["rewards", "channel", "queue", "settings"])
       $("#tab-" + name).hidden = name !== el.dataset.tab;
+    $("main").scrollTop = 0;
     updatePlacement();
     if (el.dataset.tab === "channel") await loadChannel();
   }),

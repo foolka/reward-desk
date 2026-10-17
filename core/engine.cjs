@@ -1,5 +1,6 @@
 const { randomUUID } = require("node:crypto");
 const { choose, chooseCycle } = require("./model.cjs");
+const { forItem } = require("../overlay/caption.js");
 const TERMINAL = ["done", "refunded", "failed", "external"];
 class Engine {
   constructor(store, changed = () => {}, rng) {
@@ -73,7 +74,7 @@ class Engine {
         !!event && event.source !== "chat" && event.status === "unfulfilled",
       detail,
       item: selected ? { ...selected, ...this.store.media(selected.id) } : null,
-      video: { ...reward.video },
+      video: structuredClone(forItem(reward.video, selected)),
       kind: reward.kind,
     };
     // Reserve the draw and queue entry together; retries reuse the stored item.

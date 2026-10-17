@@ -119,6 +119,47 @@ test("no fulfillment until browser ended; errors refund", (t) => {
   engine.external("1", "2", "canceled");
   assert.equal(store.job(k.id).state, "refunded");
 });
+test("queue snapshots the selected video caption, retaining it for duplicate delivery and retry", (t) => {
+  const { store, engine, dir } = fixture(t);
+  const items = ["first", "second", "blank"].map((name) => {
+    const file = path.join(dir, name + ".webm");
+    fs.writeFileSync(file, name);
+    const media = importMedia(store, file, "video");
+    return {
+      id: media.id,
+      volume: 80,
+      weight: 1,
+      captionText: name === "blank" ? "" : name,
+    };
+  });
+  const reward = store.saveReward({ ...initialReward("video"), items });
+  const event = { account: "1", id: "per-file", status: "unfulfilled" };
+  const job = engine.enqueue(reward, event, items[1].id);
+  assert.equal(job.video.caption.text, "second");
+  reward.items[1].captionText = "edited later";
+  reward.video.caption.color = "#000000";
+  store.saveReward(reward);
+  assert.equal(job.video.caption.color, "#ffffff");
+  assert.equal(engine.enqueue(reward, event).video.caption.text, "second");
+  engine.start(job, "client");
+  engine.interrupt(job.id, "disconnect");
+  engine.retry(job.id);
+  assert.equal(store.job(job.id).video.caption.text, "second");
+  assert.equal(
+    engine.enqueue(reward, null, items[0].id).video.caption.text,
+    "first",
+  );
+  assert.equal(
+    engine.enqueue(reward, null, items[2].id).video.caption.text,
+    "",
+  );
+  delete reward.items[0].captionText;
+  reward.video.caption.text = "legacy";
+  assert.equal(
+    engine.enqueue(reward, null, items[0].id).video.caption.text,
+    "legacy",
+  );
+});
 test("tests never become Twitch settlements", (t) => {
   const { engine, r, store } = fixture(t);
   const j = engine.enqueue(r);

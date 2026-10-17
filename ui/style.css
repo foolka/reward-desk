@@ -14,11 +14,19 @@
 }
 body {
   margin: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+html {
+  height: 100%;
+  overflow: hidden;
 }
 .window-titlebar {
   height: 36px;
-  position: sticky;
-  top: 0;
+  flex: 0 0 36px;
+  position: relative;
   z-index: 20;
   display: flex;
   justify-content: space-between;
@@ -112,6 +120,7 @@ button svg {
   color: #748183;
 }
 .app-header {
+  flex-shrink: 0;
   padding: 21px 26px;
   display: flex;
   justify-content: space-between;
@@ -190,13 +199,22 @@ h3 {
   flex: 1;
 }
 main {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+main > section {
   max-width: 1600px;
-  margin: auto;
+  margin-inline: auto;
+}
+.top-nav {
+  flex-shrink: 0;
 }
 .workspace {
   display: grid;
   grid-template-columns: 250px minmax(0, 1fr);
-  min-height: calc(100vh - 144px);
+  min-height: 100%;
 }
 aside {
   padding: 22px 16px;
@@ -422,6 +440,44 @@ label.check {
 .caption-fields .wide {
   grid-column: 1 / -1;
 }
+.text-placement {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  margin: 14px 0;
+}
+.text-placement > label {
+  width: 130px;
+}
+.anchor-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: #52676b;
+}
+.text-anchor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 28px);
+  grid-template-rows: repeat(3, 26px);
+  gap: 3px;
+}
+.text-anchor-grid button {
+  min-height: 0;
+  padding: 0;
+  border-radius: 3px;
+}
+.text-anchor-grid svg {
+  width: 14px;
+  height: 14px;
+}
+.text-anchor-grid [aria-pressed="true"] {
+  background: #d9ebe5;
+  border-color: #197b6a;
+  color: #126451;
+}
 .duration-options {
   margin-top: 16px;
 }
@@ -476,6 +532,21 @@ label.check {
 .media-name {
   overflow-wrap: anywhere;
   font-size: 13px;
+}
+.media-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.media-file .media-name {
+  flex: 1;
+  min-width: 0;
+}
+.media-file button {
+  width: 30px;
+  height: 30px;
+  flex: none;
 }
 .media-name small {
   display: block;

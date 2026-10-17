@@ -58,6 +58,20 @@ for (const [name, width, height] of [
 }
 seed.close();
 let app, browser;
+async function waitDone(page, id) {
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline) {
+    const state = await page.evaluate(() => desk.command("state"));
+    const job = state.jobs.find((job) => job.id === id);
+    if (job?.state === "done") return;
+    assert.ok(
+      !["failed", "attention"].includes(job?.state),
+      JSON.stringify(job),
+    );
+    await page.waitForTimeout(100);
+  }
+  throw Error("Playback did not finish: " + id);
+}
 (async () => {
   const env = { ...process.env, REWARD_DESK_TEST_DATA: profile };
   delete env.ELECTRON_RUN_AS_NODE;
@@ -136,6 +150,39 @@ let app, browser;
         fit.outerWidth <= fit.viewport,
         `Preview page overflow at ${width}`,
       );
+      const scroll = await page.evaluate(() => {
+        const main = document.querySelector("main");
+        const header = document
+          .querySelector(".app-header")
+          .getBoundingClientRect();
+        const title = document
+          .querySelector(".window-titlebar")
+          .getBoundingClientRect();
+        const nav = document.querySelector(".top-nav").getBoundingClientRect();
+        return {
+          y: scrollY,
+          scroll: main.scrollTop,
+          top: main.getBoundingClientRect().top,
+          navBottom: nav.bottom,
+          headerTop: header.top,
+          titleBottom: title.bottom,
+          titleWidth: title.width,
+          viewport: innerWidth,
+        };
+      });
+      assert.equal(
+        scroll.y,
+        0,
+        "Document must not scroll over window controls",
+      );
+      assert.ok(scroll.scroll > 0, "Only the main content scrolls");
+      assert.equal(scroll.top, scroll.navBottom);
+      assert.equal(scroll.headerTop, scroll.titleBottom);
+      assert.equal(
+        scroll.titleWidth,
+        scroll.viewport,
+        "Scrollbar does not consume titlebar width",
+      );
       assert.ok(
         await page
           .locator(".media-row")
@@ -151,6 +198,7 @@ let app, browser;
       (id) => desk.command("test", { id }),
       reward.id,
     );
+    assert.equal(job.jobs[0].rewardId, reward.id);
     await player.locator("video.clip").waitFor();
     await player.waitForFunction(
       () => document.querySelector("video")?.currentTime > 0.3,
@@ -193,13 +241,8 @@ let app, browser;
       pixels.every(([b, g, r, a]) => g > 150 && r < 90 && b < 170 && a === 255),
       `${reward.title}: colored video pixels reach all four inner edges`,
     );
-    await page.waitForFunction(
-      async (id) =>
-        (await desk.command("state")).jobs.some(
-          (j) => j.rewardId === id && j.state === "done",
-        ),
-      reward.id,
-    );
+    await waitDone(page, job.jobs[0].id);
+    await player.locator("video.clip").waitFor({ state: "detached" });
     await page
       .locator("#caption-text")
       .fill("Спасибо за поддержку!\nНовый ролик");
@@ -213,7 +256,7 @@ let app, browser;
     const captionState = await page.evaluate(() => desk.command("state"));
     const saved = captionState.rewards.find((r) => r.id === reward.id);
     assert.equal(
-      saved.video.caption.text,
+      saved.items[0].captionText,
       "Спасибо за поддержку!\nНовый ролик",
     );
     assert.equal(saved.video.duration.enabled, true);
@@ -263,6 +306,9 @@ let app, browser;
     );
     const playId = played.jobs[0].id;
     await player.locator('.video-caption[data-kind="caption"]').waitFor();
+    await player.waitForFunction(
+      () => document.querySelector("video.clip")?.currentTime > 0.4,
+    );
     assert.equal(
       await player.locator('[data-kind="duration"]').textContent(),
       "0:03",
@@ -288,13 +334,8 @@ let app, browser;
       "data:image/png;base64," + rendered.toString("base64"),
     );
     assert.ok(coloredText > 50, "Caption pixels rendered over video");
-    await page.waitForFunction(
-      async (id) =>
-        (await desk.command("state")).jobs.some(
-          (j) => j.id === id && j.state === "done",
-        ),
-      playId,
-    );
+    await waitDone(page, playId);
+    await player.locator("video.clip").waitFor({ state: "detached" });
     // Independent offsets, styles and disabling survive the next save.
     await page.locator("#caption-text").fill("<b>Текст</b>");
     await page.locator("#caption-x").fill("-25");
@@ -307,6 +348,68 @@ let app, browser;
       "<b>Текст</b>",
     );
     assert.equal(await page.locator("#placement b").count(), 0);
+    for (const kind of ["caption", "duration"]) {
+      for (const [
+        index,
+        anchor,
+      ] of require("../overlay/caption.js").anchors.entries()) {
+        await page
+          .locator(`[data-text-kind="${kind}"][data-text-anchor="${anchor}"]`)
+          .click();
+        assert.equal(await page.locator(`#${kind}-x`).inputValue(), "0");
+        assert.equal(await page.locator(`#${kind}-y`).inputValue(), "0");
+        const position = await page
+          .locator("#placement")
+          .evaluate((frame, kind) => {
+            const text = frame.querySelector(`[data-kind="${kind}"]`);
+            const scale =
+              document.querySelector("#stage").getBoundingClientRect().width /
+              1920;
+            const inset = Math.min(
+              12 * scale,
+              frame.clientWidth / 4,
+              frame.clientHeight / 4,
+            );
+            return {
+              x: text.offsetLeft,
+              y: text.offsetTop,
+              inset,
+              roomX: frame.clientWidth - 2 * inset - text.offsetWidth,
+              roomY: frame.clientHeight - 2 * inset - text.offsetHeight,
+            };
+          }, kind);
+        assert.ok(
+          Math.abs(
+            position.x - position.inset - (position.roomX * (index % 3)) / 2,
+          ) < 2,
+          `${kind} ${anchor} X`,
+        );
+        assert.ok(
+          Math.abs(
+            position.y -
+              position.inset -
+              (position.roomY * Math.floor(index / 3)) / 2,
+          ) < 2,
+          `${kind} ${anchor} Y`,
+        );
+      }
+    }
+    await page
+      .locator('[data-text-kind="caption"][data-text-anchor="top-left"]')
+      .click();
+    await page.locator("#caption-x").fill("12");
+    await page.locator("#caption-y").fill("8");
+    await page.locator("#save").click();
+    const positions = (
+      await page.evaluate(() => desk.command("state"))
+    ).rewards.find((r) => r.id === reward.id).video;
+    assert.equal(positions.caption.anchor, "top-left");
+    assert.equal(positions.caption.x, 12);
+    assert.equal(positions.duration.anchor, "bottom-right");
+    await page.locator("#caption-item").scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: path.join(out, `text-controls-${reward.title}.png`),
+    });
     await page.locator("#caption-text").fill("");
     await page.locator("#duration-enabled").uncheck();
     await page.locator("#save").click();
@@ -343,6 +446,78 @@ let app, browser;
   await help.focus();
   assert.equal(await page.locator("#option-tooltip").isVisible(), true);
   assert.ok((await page.locator("#editor .option-help").count()) >= 25);
+  await page.keyboard.press("Escape");
+  const roulette = structuredClone(rewards[0]);
+  roulette.items = [
+    { ...rewards[0].items[0], captionText: "Первый ролик" },
+    { ...rewards[1].items[0], captionText: "Второй ролик" },
+  ];
+  await page.evaluate((value) => desk.command("save", value), roulette);
+  await page.locator(`[data-id="${roulette.id}"]`).click();
+  assert.equal(
+    await page.locator("#caption-text").inputValue(),
+    "Первый ролик",
+  );
+  await page.locator("#caption-item").selectOption(roulette.items[1].id);
+  assert.equal(
+    await page.locator("#caption-text").inputValue(),
+    "Второй ролик",
+  );
+  await page.waitForFunction(
+    (id) =>
+      document.querySelector("#placement").dataset.media === id &&
+      document.querySelector("#placement video").videoHeight === 640,
+    roulette.items[1].id,
+  );
+  await page.locator("#caption-text").fill("Правка только второго");
+  await page.locator("#save").click();
+  await page
+    .locator(`[data-item="${roulette.items[0].id}"] [data-caption-edit]`)
+    .click();
+  assert.equal(
+    await page.locator("#caption-text").inputValue(),
+    "Первый ролик",
+  );
+  await page.locator("#caption-text").fill("");
+  await page.locator("#save").click();
+  const beforeRestart = await page.evaluate(() => desk.command("state"));
+  assert.deepEqual(
+    beforeRestart.rewards
+      .find((r) => r.id === roulette.id)
+      .items.map((i) => i.captionText),
+    ["", "Правка только второго"],
+  );
+  await page.evaluate(
+    ({ id, itemId }) => desk.command("test", { id, itemId }),
+    { id: roulette.id, itemId: roulette.items[1].id },
+  );
+  await player.locator('[data-kind="caption"]').waitFor();
+  assert.equal(
+    await player.locator('[data-kind="caption"]').textContent(),
+    "Правка только второго",
+  );
+  await player.locator('[data-kind="caption"]').waitFor({ state: "detached" });
+  await app.close();
+  app = await electron.launch({
+    ...(packaged ? { executablePath: path.resolve(packaged) } : {}),
+    args: [...(packaged ? [] : [root]), "--test-mode", "--mute-audio"],
+    env,
+  });
+  const reopened = await app.firstWindow();
+  await reopened.locator(`[data-id="${roulette.id}"]`).click();
+  await reopened.locator("#caption-item").selectOption(roulette.items[1].id);
+  assert.equal(
+    await reopened.locator("#caption-text").inputValue(),
+    "Правка только второго",
+  );
+  await reopened.locator(`[data-id="${rewards[2].id}"]`).click();
+  assert.equal(
+    await reopened
+      .locator('[data-text-kind="caption"][data-text-anchor="top-left"]')
+      .getAttribute("aria-pressed"),
+    "true",
+  );
+  assert.equal(await reopened.locator("#caption-x").inputValue(), "12");
   assert.deepEqual(errors, []);
   console.log(
     JSON.stringify({
@@ -352,6 +527,9 @@ let app, browser;
       compactRows: true,
       tooltipsMouseAndKeyboard: true,
       captionsAndDuration: true,
+      perItemCaptionsAfterRestart: true,
+      nineAnchors: true,
+      fixedHeaderAndWindowControls: true,
     }),
   );
 })()

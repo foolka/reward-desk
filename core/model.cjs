@@ -1,6 +1,7 @@
 const { randomInt, randomUUID } = require("node:crypto");
 const {
   fonts: captionFonts,
+  anchors: captionAnchors,
   defaults: captionDefaults,
   durationDefaults,
 } = require("../overlay/caption.js");
@@ -151,6 +152,17 @@ function normalizeReward(input, prior) {
       id: item.id,
       volume: number(item.volume, 0, 100, "Громкость"),
       weight: integer(item.weight, 0, 10000, "Вес"),
+      ...(input.kind === "video"
+        ? {
+            captionText: text(
+              item.captionText ??
+                prior?.items.find((old) => old.id === item.id)?.captionText ??
+                r.video.caption.text,
+              300,
+              "Текст ролика",
+            ),
+          }
+        : {}),
     };
   });
   if (prior)
@@ -170,8 +182,12 @@ function normalizeReward(input, prior) {
 function normalizeCaption(value) {
   if (!value || !captionFonts.includes(value.font))
     throw Error("Выберите шрифт надписи");
+  const anchor = value.anchor ?? captionDefaults.anchor;
+  if (!captionAnchors.includes(anchor))
+    throw Error("Выберите положение текста");
   return {
     text: text(value.text, 300, "Текст на видео"),
+    anchor,
     x: number(value.x, -1920, 1920, "Смещение текста X"),
     y: number(value.y, -1080, 1080, "Смещение текста Y"),
     size: number(value.size, 8, 200, "Размер текста"),
