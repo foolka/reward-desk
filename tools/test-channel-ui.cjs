@@ -313,11 +313,11 @@ const snapshot = {
         .then((t) => t.includes("*")),
       true,
     );
-    page.once("dialog", (d) => d.dismiss());
     await page.locator("[data-tab=rewards]").click();
+    await page.locator('#confirm-dialog [value="cancel"]').click();
     assert.equal(await page.locator("#tab-channel").isVisible(), true);
-    page.once("dialog", (d) => d.accept());
     await page.locator("#channel-refresh").click();
+    await page.locator('#confirm-dialog [value="accept"]').click();
     await page.waitForFunction(() => !channelDirty && !channelBusy);
     await page.locator("#toast").waitFor({ state: "hidden" });
     for (const width of [1440, 1240, 1120, 1040, 760]) {

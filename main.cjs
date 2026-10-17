@@ -84,7 +84,11 @@ function snapshot() {
     rewards: store.rewards(),
     drafts: store.drafts(),
     media: store.all("media"),
-    jobs: store.jobs().slice(-500).reverse(),
+    jobs: store
+      .jobs()
+      .slice(-500)
+      .reverse()
+      .map(({ selection, ...job }) => job),
     logs: store.logs(),
     auth: auth.view(),
     authClientId: auth.saved?.clientId || "",

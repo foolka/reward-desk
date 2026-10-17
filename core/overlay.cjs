@@ -1,7 +1,7 @@
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
-const { randomUUID } = require("node:crypto");
+const { randomUUID, createHash } = require("node:crypto");
 class Overlay {
   constructor({ store, engine, account, changed = () => {} }) {
     Object.assign(this, { store, engine, account, changed });
@@ -9,6 +9,19 @@ class Overlay {
     this.error = "";
     this.token = store.meta("overlayToken");
     this.base = "/o/" + this.token;
+    this.build = createHash("sha256");
+    for (const file of [
+      "index.html",
+      "player.js",
+      "player.css",
+      "geometry.js",
+      "caption.js",
+      "caption.css",
+    ])
+      this.build.update(
+        fs.readFileSync(path.join(__dirname, "../overlay", file)),
+      );
+    this.build = this.build.digest("hex");
   }
   url() {
     return `http://127.0.0.1:${this.port}${this.base}/`;
@@ -90,7 +103,12 @@ class Overlay {
         "Content-Security-Policy",
         "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; media-src 'self'; connect-src 'self'; img-src 'self'; frame-ancestors 'none'",
       );
-      res.end(fs.readFileSync(path.join(__dirname, "../overlay", file)));
+      const data = fs.readFileSync(path.join(__dirname, "../overlay", file));
+      res.end(
+        file === "index.html"
+          ? data.toString("utf8").replace("REWARD_BUILD", this.build)
+          : data,
+      );
       return;
     }
     if (req.method === "GET" && leaf === "/events") {
@@ -106,7 +124,7 @@ class Overlay {
         Connection: "keep-alive",
       });
       this.clients.set(id, c);
-      this.send(c, "hello", { id });
+      this.send(c, "hello", { id, build: this.build });
       this.changed();
       res.on("close", () => {
         this.clients.delete(id);

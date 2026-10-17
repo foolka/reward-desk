@@ -1,4 +1,7 @@
 const stage = document.querySelector("#stage");
+const loadedBuild = document.querySelector(
+  'meta[name="reward-build"]',
+)?.content;
 let client = "",
   current = null,
   source,
@@ -38,7 +41,13 @@ function connect() {
   client = "";
   source = new EventSource("events");
   source.addEventListener("hello", (e) => {
-    client = JSON.parse(e.data).id;
+    const hello = JSON.parse(e.data);
+    if (loadedBuild && hello.build && loadedBuild !== hello.build) {
+      source.close();
+      location.reload();
+      return;
+    }
+    client = hello.id;
     void ack("ready");
   });
   source.addEventListener("ping", () => {

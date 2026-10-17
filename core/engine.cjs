@@ -1,6 +1,12 @@
 const { randomUUID } = require("node:crypto");
 const { choose, chooseCycle } = require("./model.cjs");
 const { forItem } = require("../overlay/caption.js");
+const {
+  cycleKey,
+  poolFor,
+  projectQueue,
+  commitStart,
+} = require("./roulette.cjs");
 const TERMINAL = ["done", "refunded", "failed", "external"];
 class Engine {
   constructor(store, changed = () => {}, rng) {
@@ -23,24 +29,17 @@ class Engine {
     let selected,
       cycle,
       detail = "";
-    const cycleKey =
-      "roulette:" +
-      JSON.stringify([
-        reward.account || reward.chatAccount || event?.account || "",
-        reward.clientId || reward.chatClientId || "",
-        reward.id,
-      ]);
+    const key = cycleKey(reward, event);
+    const projected = itemId
+      ? null
+      : projectQueue(this.store, key, reward, this.rng);
     try {
       if (itemId) selected = reward.items.find((i) => i.id === itemId);
       else if (reward.allowRepeats === true) {
         selected = choose(reward.items, this.rng);
         cycle = { used: [], last: selected.id };
       } else {
-        ({ selected, cycle } = chooseCycle(
-          reward.items,
-          this.store.meta(cycleKey, {}),
-          this.rng,
-        ));
+        ({ selected, cycle } = chooseCycle(reward.items, projected, this.rng));
       }
       if (!selected || !this.store.media(selected.id))
         throw Error("Медиа не найдено");
@@ -76,10 +75,15 @@ class Engine {
       item: selected ? { ...selected, ...this.store.media(selected.id) } : null,
       video: structuredClone(forItem(reward.video, selected)),
       kind: reward.kind,
+      selection: {
+        key,
+        mode: itemId ? "fixed" : reward.allowRepeats ? "random" : "cycle",
+        pool: poolFor(reward),
+      },
     };
     // Reserve the draw and queue entry together; retries reuse the stored item.
     if (this.store.insertJob(job) && !detail && cycle)
-      this.store.setMeta(cycleKey, cycle);
+      this.store.setMeta(key, cycle);
     return job;
   }
   next(account) {
@@ -95,11 +99,26 @@ class Engine {
   start(job, client) {
     if (this.playing() || this.store.job(job.id)?.state !== "queued")
       return null;
-    const j = this.store.putJob({
-      ...job,
-      state: "playing",
-      client,
-      startedAt: Date.now(),
+    const j = this.store.transaction(() => {
+      const reward = this.store.reward(job.rewardId);
+      const current = this.store.job(job.id);
+      if (reward) {
+        const key = current.selection?.key || cycleKey(reward, current);
+        projectQueue(this.store, key, reward, this.rng);
+        Object.assign(current, this.store.job(job.id));
+        commitStart(this.store, current, reward, this.rng);
+      }
+      const started = this.store.putJob({
+        ...current,
+        state: "playing",
+        client,
+        cycleStartedAt:
+          current.cycleStartedAt || current.startedAt || Date.now(),
+        startedAt: Date.now(),
+      });
+      if (reward && current.selection)
+        projectQueue(this.store, current.selection.key, reward, this.rng);
+      return started;
     });
     this.changed();
     return j;
@@ -131,11 +150,21 @@ class Engine {
     const j = this.store.job(id);
     if (!j || !["queued", "attention"].includes(j.state))
       throw Error("Эту запись нельзя отменить");
-    this.store.putJob({
-      ...j,
-      state: j.refundable ? "settling" : "failed",
-      desired: "CANCELED",
-      detail: "Отменено вручную",
+    this.store.transaction(() => {
+      this.store.putJob({
+        ...j,
+        state: j.refundable ? "settling" : "failed",
+        desired: "CANCELED",
+        detail: "Отменено вручную",
+      });
+      const reward = this.store.reward(j.rewardId);
+      if (reward)
+        projectQueue(
+          this.store,
+          j.selection?.key || cycleKey(reward, j),
+          reward,
+          this.rng,
+        );
     });
     this.changed();
   }
@@ -149,7 +178,17 @@ class Engine {
       j.detail = "Статус изменён в Twitch: " + status;
     }
     j.refundable = false;
-    this.store.putJob(j);
+    this.store.transaction(() => {
+      this.store.putJob(j);
+      const reward = this.store.reward(j.rewardId);
+      if (reward && !j.startedAt)
+        projectQueue(
+          this.store,
+          j.selection?.key || cycleKey(reward, j),
+          reward,
+          this.rng,
+        );
+    });
     this.changed();
   }
 }

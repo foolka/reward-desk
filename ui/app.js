@@ -65,6 +65,20 @@ function act(el, fn) {
         .catch(() => {}),
     );
 }
+function confirmAction(message) {
+  const dialog = $("#confirm-dialog");
+  if (dialog.open) return Promise.resolve(false);
+  $("#confirm-message").textContent = message;
+  dialog.returnValue = "cancel";
+  return new Promise((resolve) => {
+    dialog.addEventListener(
+      "close",
+      () => resolve(dialog.returnValue === "accept"),
+      { once: true },
+    );
+    dialog.showModal();
+  });
+}
 function accept(value) {
   state = value;
   renderList();
@@ -457,7 +471,7 @@ function percentages() {
   heading.firstChild.textContent = draft.allowRepeats ? "Шанс" : "Доля";
   $("#roulette-help").textContent = draft.allowRepeats
     ? "Включено: каждый запуск выбирает из всех файлов с учётом веса. Один файл может выпасть несколько раз подряд."
-    : "Выключено: каждый файл с весом больше нуля выпадет один раз за цикл. Цикл общий для всех зрителей и сохраняется после перезапуска. Вес влияет на порядок, а не число показов за цикл.";
+    : "Выключено: каждый файл с весом больше нуля показывается один раз за цикл. Отменённые до показа возвращаются в выбор; остановленный после начала ролик уже учтён. Цикл общий для зрителей и сохраняется после перезапуска.";
   const total = draft.items.reduce((n, i) => n + i.weight, 0);
   $$(".media-row").forEach((row) => {
     const i = draft.items.find((i) => i.id === row.dataset.item);
@@ -751,7 +765,9 @@ $$("[data-tab]").forEach((el) =>
     if (saving || channelBusy) return;
     if (
       channelDirty &&
-      !confirm("Есть несохранённые изменения. Перейти без сохранения?")
+      !(await confirmAction(
+        "Есть несохранённые изменения. Перейти без сохранения?",
+      ))
     )
       return;
     flushLocalDraft();
@@ -777,9 +793,9 @@ $("#search").addEventListener("input", renderList);
 for (const name of ["tray", "minimize", "maximize", "quit"])
   act($("#window-" + name), () => command(name));
 act($("#pause"), () => command("pause", !state.paused));
-act($("#stop"), () => {
+act($("#stop"), async () => {
   if (
-    confirm(
+    await confirmAction(
       "Остановить воспроизведение? Незавершённая покупка будет отменена с возвратом баллов.",
     )
   )

@@ -412,6 +412,18 @@
       </section>
     </main>
     <div id="toast" role="status" hidden></div>
+    <dialog
+      id="confirm-dialog"
+      aria-labelledby="confirm-title"
+      aria-describedby="confirm-message"
+    >
+      <h2 id="confirm-title">Подтверждение</h2>
+      <div id="confirm-message" class="update-notes"></div>
+      <form method="dialog" class="button-row">
+        <button value="cancel" autofocus>Отмена</button>
+        <button value="accept" class="primary">Продолжить</button>
+      </form>
+    </dialog>
     <dialog id="history-dialog" aria-labelledby="history-title">
       <div class="section-head">
         <h2 id="history-title">История награды</h2>

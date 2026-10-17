@@ -12,6 +12,7 @@ const {
 } = require("../core/model.cjs");
 const { Store } = require("../core/store.cjs");
 const { Engine } = require("../core/engine.cjs");
+const { playedKey } = require("../core/roulette.cjs");
 function fixture(t, kind = "audio") {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "reward-cycle-"));
   const f = { root, store: new Store(root) };
@@ -209,4 +210,88 @@ test("cycle reservation and job insertion roll back together on a storage error"
   assert.equal(f.store.meta(f.key), null);
   f.store.setMeta = write;
   assert.equal(f.draw("broken").item.id, f.reward.items[0].id);
+});
+for (const kind of ["audio", "video"])
+  test(`${kind}: stopping then canceling a multi-cycle queue keeps shown progress and returns unseen files`, (t) => {
+    const f = fixture(t, kind);
+    const queued = Array.from({ length: 13 }, () => f.engine.enqueue(f.reward));
+    const first = f.engine.start(queued[0], "obs");
+    f.engine.finish(first.id, false, "Остановлено вручную");
+    for (const job of queued.slice(1).reverse()) f.engine.cancel(job.id);
+    assert.deepEqual(f.store.meta(playedKey(f.key)).used, [first.item.id]);
+    assert.deepEqual(f.store.meta(f.key).used, [first.item.id]);
+    f.store.close();
+    f.store = new Store(f.root);
+    f.engine = new Engine(
+      f.store,
+      () => {},
+      () => 0,
+    );
+    const shown = [first.item.id];
+    for (let n = 0; n < 4; n++) {
+      const job = f.engine.start(f.engine.enqueue(f.reward), "obs");
+      shown.push(job.item.id);
+      f.engine.finish(job.id, true);
+    }
+    assert.equal(new Set(shown).size, 5);
+    assert.notEqual(f.engine.enqueue(f.reward).item.id, shown.at(-1));
+  });
+test("canceled pending items are replaced before later cycles play, without changing queued caption snapshots", (t) => {
+  const f = fixture(t, "video");
+  f.reward.items.forEach((item, n) => (item.captionText = "Original " + n));
+  f.store.putReward(f.reward);
+  const queue = Array.from({ length: 11 }, () => f.engine.enqueue(f.reward));
+  const first = f.engine.start(queue[0], "obs");
+  f.engine.finish(first.id, true);
+  f.engine.cancel(queue[1].id);
+  f.reward.items.forEach((item) => (item.captionText = "Changed later"));
+  f.store.putReward(f.reward);
+  const shown = [first.item.id];
+  for (let n = 0; n < 9; n++) {
+    const job = f.engine.start(f.engine.next("owner"), "obs");
+    assert.match(job.video.caption.text, /^Original /);
+    shown.push(job.item.id);
+    f.engine.finish(job.id, true);
+  }
+  assert.equal(new Set(shown.slice(0, 5)).size, 5);
+  assert.equal(new Set(shown.slice(5, 10)).size, 5);
+});
+test("legacy progress excludes never-started canceled reservations without deleting history", (t) => {
+  const f = fixture(t);
+  for (let n = 0; n < 5; n++)
+    f.store.putJob({
+      id: "old" + n,
+      rewardId: f.reward.id,
+      account: "owner",
+      clientId: "client",
+      item: f.reward.items[n],
+      createdAt: n + 1,
+      startedAt: n < 2 ? n + 1 : undefined,
+      state: n < 2 ? "done" : "failed",
+    });
+  f.store.setMeta(f.key, {
+    used: f.reward.items.map((item) => item.id),
+    last: f.reward.items[4].id,
+  });
+  const history = f.store.jobs();
+  const next = Array.from(
+    { length: 3 },
+    () => f.engine.enqueue(f.reward).item.id,
+  );
+  assert.equal(
+    new Set([...f.reward.items.slice(0, 2).map((item) => item.id), ...next])
+      .size,
+    5,
+  );
+  assert.deepEqual(
+    f.store.jobs().filter((job) => job.id.startsWith("old")),
+    history,
+  );
+});
+test("a direct-file test before the first roulette activation does not consume its first draw", (t) => {
+  const f = fixture(t);
+  const fixed = f.engine.enqueue(f.reward, null, f.reward.items[0].id);
+  f.engine.start(fixed, "obs");
+  f.engine.finish(fixed.id, true);
+  assert.equal(f.engine.enqueue(f.reward).item.id, f.reward.items[0].id);
 });

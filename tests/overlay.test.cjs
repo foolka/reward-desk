@@ -19,6 +19,9 @@ test("overlay is loopback-only, authenticated, read-only and supports media rang
   });
   const url = overlay.url();
   assert.equal((await fetch(url)).status, 200);
+  assert.ok(
+    (await (await fetch(url)).text()).includes(`content="${overlay.build}"`),
+  );
   assert.equal((await fetch(url.replace(overlay.token, "wrong"))).status, 404);
   assert.equal(
     (await fetch(url, { headers: { Origin: "https://evil.example" } })).status,

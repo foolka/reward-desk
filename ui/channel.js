@@ -190,11 +190,13 @@ function renderChannel() {
   icons();
   $$(".column-popover:popover-open").forEach(positionChannelPopover);
 }
-function selectChannel(id) {
+async function selectChannel(id) {
   if (channelBusy) return;
   if (
     channelDirty &&
-    !confirm("Есть несохранённые изменения. Перейти без сохранения?")
+    !(await confirmAction(
+      "Есть несохранённые изменения. Перейти без сохранения?",
+    ))
   )
     return;
   channelSelected = id;
@@ -241,7 +243,10 @@ function renderChannelEditor() {
 }
 async function loadChannel() {
   if (channelBusy) return;
-  if (channelDirty && !confirm("Обновить список без сохранения изменений?"))
+  if (
+    channelDirty &&
+    !(await confirmAction("Обновить список без сохранения изменений?"))
+  )
     return;
   if (!state.auth.user) {
     renderChannel();
