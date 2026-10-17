@@ -132,6 +132,34 @@ test("lost creation response is recovered without duplicate POST", async (t) => 
   assert.equal(f.requests.filter((x) => x.method === "POST").length, 1);
   assert.equal(f.store.reward(f.r.id).remoteId, "remote-1");
 });
+test("new reward creation sends selected color, price and all configurable limits", async (t) => {
+  const f = fixture(t);
+  f.store.putReward({
+    ...f.r,
+    cost: 2345,
+    background: "#dd8844",
+    prompt: "Выберите видео",
+    input: true,
+    enabled: false,
+    paused: true,
+    streamLimit: 7,
+    userLimit: 2,
+    cooldown: 45,
+    skipQueue: true,
+  });
+  await f.twitch.publish(f.r.id);
+  const body = f.requests.find((r) => r.method === "POST").body;
+  assert.equal(body.cost, 2345);
+  assert.equal(body.background_color, "#dd8844");
+  assert.equal(body.prompt, "Выберите видео");
+  assert.equal(body.is_user_input_required, true);
+  assert.equal(body.max_per_stream, 7);
+  assert.equal(body.max_per_user_per_stream, 2);
+  assert.equal(body.global_cooldown_seconds, 45);
+  assert.equal(body.is_enabled, false);
+  assert.equal(body.should_redemptions_skip_request_queue, true);
+  assert.equal(f.remote[0].is_paused, true);
+});
 test("existing title is never silently claimed", async (t) => {
   const f = fixture(t);
   f.remote.push({ id: "not-ours", title: f.r.title });

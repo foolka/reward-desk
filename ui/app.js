@@ -48,10 +48,12 @@ function accept(value) {
   renderStatus();
   renderJobs();
   renderSettings();
+  channelAccountChanged();
   if (selected && !dirty && !saving) {
-    draft = structuredClone(state.rewards.find((r) => r.id === selected));
-    if (!draft) {
-      selected = "";
+    const latest = state.rewards.find((r) => r.id === selected);
+    if (JSON.stringify(draft) !== JSON.stringify(latest)) {
+      draft = structuredClone(latest);
+      if (!draft) selected = "";
       renderEditor();
     }
   }
@@ -81,17 +83,48 @@ function select(id) {
   renderEditor();
   renderList();
 }
-function num(key, label, min, max, step = 1) {
-  return `<label>${label}<input data-field="${key}" type="number" min="${min}" max="${max}" step="${step}" value="${esc(draft[key])}"></label>`;
+function num(key, label, min, max, step = 1, value = draft) {
+  return `<label>${label}<input data-field="${key}" type="number" min="${min}" max="${max}" step="${step}" value="${esc(value[key])}"></label>`;
 }
 function vnum(key, label, min, max) {
   return `<label>${label}<input data-video="${key}" type="number" min="${min}" max="${max}" value="${esc(draft.video[key])}"></label>`;
 }
-function check(key, label) {
-  return `<label class="check"><input data-field="${key}" type="checkbox" ${draft[key] ? "checked" : ""}>${label}</label>`;
+function check(key, label, value = draft) {
+  return `<label class="check"><input data-field="${key}" type="checkbox" ${value[key] ? "checked" : ""}>${label}</label>`;
 }
-function limit(key, label, max) {
-  return `<label>${label}<div class="limit-line"><input type="checkbox" data-limit="${key}" ${draft[key] ? "checked" : ""} aria-label="Включить ${label}"><input data-field="${key}" type="number" min="1" max="${max}" value="${draft[key] || 1}" ${draft[key] ? "" : "disabled"} aria-label="${label}"></div></label>`;
+function limit(key, label, max, value = draft) {
+  return `<label>${label}<div class="limit-line"><input type="checkbox" data-limit="${key}" ${value[key] ? "checked" : ""} aria-label="Включить ${label}"><input data-field="${key}" type="number" min="1" max="${max}" value="${esc(value[key] || 1)}" ${value[key] ? "" : "disabled"} aria-label="${label}"></div></label>`;
+}
+function settingsMarkup(value) {
+  return `<div class="form-grid"><label>Название<input data-field="title" maxlength="45" value="${esc(value.title)}"></label>${num("cost", "Баллы", 1, 1000000000, 1, value)}<label>Цвет<input data-field="background" type="color" value="${esc(value.background)}"></label><label class="wide">Описание<textarea data-field="prompt" maxlength="200">${esc(value.prompt)}</textarea></label></div>
+  <div class="switches">${check("enabled", "Доступна в Twitch", value)}${check("paused", "На паузе", value)}${check("input", "Сообщение зрителя", value)}</div>
+  <div class="limits">${limit("streamLimit", "Лимит за эфир", 1000000000, value)}${limit("userLimit", "На одного зрителя", 1000000000, value)}${limit("cooldown", "Перезарядка, сек.", 604800, value)}</div>
+  <div class="switches">${check("skipQueue", "Сразу завершать покупку в Twitch", value)}</div><div data-skip-warning class="notice" ${value.skipQueue ? "" : "hidden"}>При мгновенном завершении Twitch не позволяет вернуть баллы. Покупки во время отключения приложения могут быть пропущены.</div>`;
+}
+function bindSettings(root, getValue, changed) {
+  root.querySelectorAll("[data-field]").forEach((el) =>
+    el.addEventListener("input", () => {
+      const value = getValue();
+      value[el.dataset.field] =
+        el.type === "checkbox"
+          ? el.checked
+          : el.type === "number"
+            ? Number(el.value)
+            : el.value;
+      if (el.dataset.field === "skipQueue")
+        root.querySelector("[data-skip-warning]").hidden = !el.checked;
+      changed();
+    }),
+  );
+  root.querySelectorAll("[data-limit]").forEach((el) =>
+    el.addEventListener("change", () => {
+      const value = getValue();
+      const field = root.querySelector(`[data-field="${el.dataset.limit}"]`);
+      field.disabled = !el.checked;
+      value[el.dataset.limit] = el.checked ? Number(field.value) : 0;
+      changed();
+    }),
+  );
 }
 function renderEditor() {
   if (!draft) {
@@ -103,34 +136,11 @@ function renderEditor() {
   const video = draft.kind === "video";
   $("#editor").innerHTML =
     `<div class="editor-head"><div class="title"><h2>${esc(draft.title)}</h2><small>${draft.remoteId ? "Связана с Twitch" : "Локальный черновик"}${draft.sync === "pending" ? " · изменения не отправлены" : ""}</small></div><div class="button-row"><button id="test-reward">${icon("play")}Тест</button><button id="remove-reward" class="danger" title="Удалить награду">${icon("trash-2")}</button></div></div>
-  <div class="form-grid"><label>Название<input data-field="title" maxlength="45" value="${esc(draft.title)}"></label>${num("cost", "Баллы", 1, 1000000000)}<label>Цвет<input data-field="background" type="color" value="${draft.background}"></label><label class="wide">Описание<textarea data-field="prompt" maxlength="200">${esc(draft.prompt)}</textarea></label></div>
-  <div class="switches">${check("enabled", "Доступна в Twitch")}${check("paused", "На паузе")}${check("input", "Сообщение зрителя")}</div>
-  <div class="limits">${limit("streamLimit", "Лимит за эфир", 1000000000)}${limit("userLimit", "На одного зрителя", 1000000000)}${limit("cooldown", "Перезарядка, сек.", 604800)}</div>
-  <div class="switches">${check("skipQueue", "Сразу завершать покупку в Twitch")}</div><div id="skip-warning" class="notice" ${draft.skipQueue ? "" : "hidden"}>При мгновенном завершении Twitch не позволяет вернуть баллы. Покупки во время отключения приложения могут быть пропущены.</div>
+  ${settingsMarkup(draft)}
   <section class="editor-section"><div class="section-head"><h3>${video ? "Видео" : "Звуки"} <span class="muted" id="media-count"></span></h3><span class="muted" id="media-mode"></span></div><div id="media-list" class="media-list"></div><div id="drop-zone" class="drop-zone"><button id="add-files">${icon("upload")}Добавить файлы</button><span class="formats">${video ? "MP4 · WebM" : "MP3 · WAV · OGG · M4A · FLAC"}</span></div></section>
   ${video ? `<section class="editor-section"><div class="section-head"><h3>Размещение видео</h3><select id="position-mode" aria-label="Размещение" style="width:190px"><option value="fixed">Фиксированная область</option><option value="random">Случайное место</option></select></div><div class="preview-layout"><div><div id="stage" class="stage"><div id="placement" class="placement">${icon("move")}</div></div><div class="stage-caption"><span>1920 × 1080</span><span id="coordinates"></span></div></div><div class="video-controls">${vnum("width", "Макс. ширина", 40, 1920)}${vnum("height", "Макс. высота", 40, 1080)}${vnum("x", "X", 0, 1920)}${vnum("y", "Y", 0, 1080)}${vnum("border", "Толщина рамки", 0, 40)}<label>Стиль рамки<select id="border-style"><option value="solid">Сплошная</option><option value="dashed">Пунктир</option><option value="dotted">Точки</option><option value="double">Двойная</option><option value="none">Без рамки</option></select></label>${vnum("radius", "Скругление", 0, 200)}<label>Цвет рамки<input type="color" id="border-color" value="${draft.video.color}"></label><label class="check wide"><input type="checkbox" id="tilt" ${draft.video.angle ? "checked" : ""}>Случайный наклон</label><label class="wide">Максимальный угол, ±°<input id="angle" type="range" min="0" max="45" value="${draft.video.angle}"><output id="angle-value">${draft.video.angle}°</output></label></div></div></section>` : ""}
   <div class="save-footer"><button id="save" class="primary">${icon("save")}Сохранить</button><button id="publish">${icon("cloud-upload")}${draft.remoteId ? "Синхронизировать" : "Создать в Twitch"}</button></div>`;
-  $$("[data-field]").forEach((el) =>
-    el.addEventListener("input", () => {
-      draft[el.dataset.field] =
-        el.type === "checkbox"
-          ? el.checked
-          : el.type === "number"
-            ? Number(el.value)
-            : el.value;
-      markDirty();
-      if (el.dataset.field === "skipQueue")
-        $("#skip-warning").hidden = !el.checked;
-    }),
-  );
-  $$("[data-limit]").forEach((el) =>
-    el.addEventListener("change", () => {
-      const field = $(`[data-field="${el.dataset.limit}"]`);
-      field.disabled = !el.checked;
-      draft[el.dataset.limit] = el.checked ? Number(field.value) : 0;
-      markDirty();
-    }),
-  );
+  bindSettings($("#editor"), () => draft, markDirty);
   act($("#save"), save);
   act($("#publish"), async () => {
     if (draft.sync !== "creating") await save();
@@ -343,6 +353,7 @@ function updatePlacement() {
   }
 }
 function renderStatus() {
+  $(".version").textContent = "PRIVATE " + state.version;
   $("#connection-text").textContent = state.auth.user
     ? `${state.auth.user.login} · ${state.twitch}`
     : "Twitch не подключён";
@@ -408,11 +419,25 @@ function renderSettings() {
       .join("\n") || "Событий пока нет";
 }
 $$("[data-tab]").forEach((el) =>
-  act(el, () => {
+  act(el, async () => {
+    if (el.classList.contains("active")) return;
+    if (saving || channelBusy) return;
+    if (
+      (dirty || channelDirty) &&
+      !confirm("Есть несохранённые изменения. Перейти без сохранения?")
+    )
+      return;
+    dirty = false;
+    channelDirty = false;
+    if (selected) {
+      draft = structuredClone(state.rewards.find((r) => r.id === selected));
+      renderEditor();
+    }
     $$("[data-tab]").forEach((b) => b.classList.toggle("active", b === el));
-    for (const name of ["rewards", "queue", "settings"])
+    for (const name of ["rewards", "channel", "queue", "settings"])
       $("#tab-" + name).hidden = name !== el.dataset.tab;
     updatePlacement();
+    if (el.dataset.tab === "channel") await loadChannel();
   }),
 );
 for (const kind of ["audio", "video"])
@@ -448,9 +473,11 @@ act($("#login"), () => command("login", $("#client-id").value));
 act($("#save-port"), () => command("port", Number($("#port").value)));
 addEventListener("resize", updatePlacement);
 desk.onState(accept);
-command("state")
-  .then(() => {
-    if (state.rewards.length) select(state.rewards[0].id);
-  })
-  .catch(() => {});
+addEventListener("DOMContentLoaded", () =>
+  command("state")
+    .then(() => {
+      if (state.rewards.length) select(state.rewards[0].id);
+    })
+    .catch(() => {}),
+);
 icons();

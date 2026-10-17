@@ -84,6 +84,13 @@ const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.locator(".reward-item").first().waitFor();
   assert.equal(await page.locator(".reward-item").count(), 2);
+  await page.locator("[data-tab=channel]").click();
+  assert.equal(await page.locator("#channel-refresh").isDisabled(), true);
+  assert.match(
+    await page.locator("#channel-empty").textContent(),
+    /Войдите через Twitch/,
+  );
+  await page.locator("[data-tab=rewards]").click();
   await page.locator(`[data-id="${movie.id}"]`).click();
   await page.locator("#placement").waitFor();
   await page.locator("[data-field=title]").fill("Видео-сюрприз: новый");

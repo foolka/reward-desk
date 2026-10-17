@@ -480,8 +480,90 @@ label.check {
   padding-bottom: 10px;
 }
 #tab-queue,
+#tab-channel,
 #tab-settings {
   padding: 28px;
+}
+.channel-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(400px, 1.1fr);
+  gap: 26px;
+}
+.channel-layout > div {
+  min-width: 0;
+}
+.channel-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 175px;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.channel-table {
+  table-layout: fixed;
+}
+.channel-table th:first-child {
+  width: 48px;
+}
+.channel-table th:nth-child(3) {
+  width: 92px;
+}
+.channel-table th:last-child {
+  width: 46px;
+}
+.channel-table .selected {
+  background: #e2eeea;
+}
+.channel-table strong {
+  overflow-wrap: anywhere;
+}
+.reward-cost {
+  font-variant-numeric: tabular-nums;
+}
+.reward-swatch {
+  display: block;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #0002;
+  border-radius: 5px;
+}
+#channel-editor {
+  border-left: 1px solid #d8dfdf;
+  padding-left: 26px;
+}
+#channel-editor .editor-head {
+  flex-wrap: wrap;
+}
+#channel-editor fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+#channel-editor fieldset:disabled {
+  opacity: 0.7;
+}
+#channel-editor form {
+  margin-top: 20px;
+}
+#channel-editor .save-footer {
+  position: static;
+}
+#channel-updated {
+  font-size: 12px;
+  margin-top: 7px;
+}
+#channel-editor .form-grid {
+  grid-template-columns: minmax(0, 1fr) 110px 65px;
+}
+@media (max-width: 1100px) {
+  .channel-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #channel-editor {
+    border-left: 0;
+    border-top: 1px solid #d8dfdf;
+    padding: 24px 0 0;
+  }
 }
 .table-wrap {
   overflow-x: auto;

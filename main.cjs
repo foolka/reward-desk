@@ -18,6 +18,7 @@ const { Engine } = require("./core/engine.cjs");
 const { Overlay } = require("./core/overlay.cjs");
 const { TwitchAuth, safeError } = require("./core/twitch-auth.cjs");
 const { Twitch } = require("./core/twitch.cjs");
+const { ChannelRewards } = require("./core/channel-rewards.cjs");
 const test = process.argv.includes("--test-mode");
 if (process.env.REWARD_DESK_TEST_DATA && test)
   app.setPath("userData", path.resolve(process.env.REWARD_DESK_TEST_DATA));
@@ -32,6 +33,7 @@ let win,
   overlay,
   auth,
   twitch,
+  channelRewards,
   closing = false,
   serial = Promise.resolve();
 const root = app.getPath("userData");
@@ -62,6 +64,7 @@ function snapshot() {
     jobs: store.jobs().slice(-500).reverse(),
     logs: store.logs(),
     auth: auth.view(),
+    authClientId: auth.saved?.clientId || "",
     clientId: store.meta("clientId", require("./twitch-client.json").clientId),
     twitch: twitch.status,
     overlay: overlay.view(),
@@ -100,6 +103,7 @@ app
       savePending: (v) => privateSave("auth-pending.bin", v),
     });
     twitch = new Twitch({ auth, store, engine, changed });
+    channelRewards = new ChannelRewards(twitch);
     overlay = new Overlay({
       store,
       engine,
@@ -190,6 +194,21 @@ app
   });
 async function execute(command, arg) {
   switch (command) {
+    case "channel-list":
+      if (test) throw Error("Twitch отключён в тестовом режиме");
+      return channelRewards.list();
+    case "channel-save":
+      if (test) throw Error("Twitch отключён в тестовом режиме");
+      return channelRewards.save(arg);
+    case "channel-dashboard": {
+      const login = auth.saved?.user.login;
+      if (!login || !/^[a-z0-9_]+$/i.test(login))
+        throw Error("Сначала войдите через Twitch");
+      await shell.openExternal(
+        `https://dashboard.twitch.tv/u/${login}/viewer-rewards/channel-points/rewards`,
+      );
+      return;
+    }
     case "new":
       store.putReward({
         ...initialReward(arg === "video" ? "video" : "audio"),

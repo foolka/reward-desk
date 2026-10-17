@@ -25,6 +25,8 @@
     <nav class="top-nav">
       <button data-tab="rewards" class="active">
         <i data-lucide="gift"></i>Награды</button
+      ><button data-tab="channel">
+        <i data-lucide="twitch"></i>Награды канала</button
       ><button data-tab="queue">
         <i data-lucide="list-video"></i>Очередь
         <span id="queue-count">0</span></button
@@ -64,6 +66,56 @@
             <button id="first-create" class="primary">
               <i data-lucide="plus"></i>Создать награду
             </button>
+          </div>
+        </div>
+      </section>
+      <section id="tab-channel" hidden>
+        <div class="section-head">
+          <div>
+            <h2>Награды канала</h2>
+            <div id="channel-updated" class="muted"></div>
+          </div>
+          <div class="button-row">
+            <button id="channel-dashboard">
+              <i data-lucide="external-link"></i>Панель Twitch</button
+            ><button id="channel-refresh" title="Обновить награды">
+              <i data-lucide="refresh-cw"></i>
+            </button>
+          </div>
+        </div>
+        <div id="channel-error" class="notice" role="status" hidden></div>
+        <div class="channel-layout">
+          <div class="channel-browser">
+            <div class="channel-filters">
+              <input
+                id="channel-search"
+                type="search"
+                placeholder="Поиск награды"
+                aria-label="Поиск награды канала"
+              />
+              <select id="channel-filter" aria-label="Доступ к наградам">
+                <option value="all">Все награды</option>
+                <option value="editable">Можно изменить</option>
+                <option value="readonly">Только просмотр</option>
+              </select>
+            </div>
+            <div class="table-wrap">
+              <table class="channel-table">
+                <thead>
+                  <tr>
+                    <th>Цвет</th>
+                    <th>Награда</th>
+                    <th>Баллы</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="channel-list"></tbody>
+              </table>
+            </div>
+            <div id="channel-empty" class="empty"></div>
+          </div>
+          <div id="channel-editor">
+            <div class="empty">Выберите награду</div>
           </div>
         </div>
       </section>
@@ -156,5 +208,6 @@
     <div id="toast" role="status" hidden></div>
     <script src="../node_modules/lucide/dist/umd/lucide.js"></script>
     <script src="app.js"></script>
+    <script src="channel.js"></script>
   </body>
 </html>

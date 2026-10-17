@@ -57,12 +57,8 @@ function initialReward(kind = "audio") {
     sync: "draft",
   };
 }
-function normalizeReward(input, prior) {
-  if (!input || !["audio", "video"].includes(input.kind))
-    throw Error("Выберите звук или видео");
-  const r = initialReward(input.kind),
-    v = input.video || r.video;
-  Object.assign(r, {
+function normalizeSettings(input) {
+  const r = {
     title: text(input.title, 45, "Название", true),
     prompt: text(input.prompt || "", 200, "Описание"),
     cost: integer(input.cost, 1, 1000000000, "Стоимость"),
@@ -70,12 +66,40 @@ function normalizeReward(input, prior) {
     streamLimit: integer(input.streamLimit, 0, 1000000000, "Лимит за эфир"),
     userLimit: integer(input.userLimit, 0, 1000000000, "Лимит на зрителя"),
     cooldown: integer(input.cooldown, 0, 604800, "Перезарядка"),
-  });
+  };
   for (const key of ["enabled", "paused", "input", "skipQueue"]) {
     if (typeof input[key] !== "boolean")
       throw Error("Неверный переключатель: " + key);
     r[key] = input[key];
   }
+  return r;
+}
+function fromTwitch(r) {
+  return normalizeSettings({
+    title: r.title,
+    prompt: r.prompt,
+    cost: r.cost,
+    background: r.background_color,
+    enabled: r.is_enabled,
+    paused: r.is_paused,
+    input: r.is_user_input_required,
+    skipQueue: r.should_redemptions_skip_request_queue,
+    streamLimit: r.max_per_stream_setting?.is_enabled
+      ? r.max_per_stream_setting.max_per_stream
+      : 0,
+    userLimit: r.max_per_user_per_stream_setting?.is_enabled
+      ? r.max_per_user_per_stream_setting.max_per_user_per_stream
+      : 0,
+    cooldown: r.global_cooldown_setting?.is_enabled
+      ? r.global_cooldown_setting.global_cooldown_seconds
+      : 0,
+  });
+}
+function normalizeReward(input, prior) {
+  if (!input || !["audio", "video"].includes(input.kind))
+    throw Error("Выберите звук или видео");
+  const r = { ...initialReward(input.kind), ...normalizeSettings(input) },
+    v = input.video || r.video;
   if (
     !["fixed", "random"].includes(v.mode) ||
     !["solid", "dashed", "dotted", "double", "none"].includes(v.borderStyle)
@@ -152,6 +176,8 @@ function choose(items, rng = randomInt) {
 module.exports = {
   initialReward,
   normalizeReward,
+  normalizeSettings,
+  fromTwitch,
   twitchFields,
   choose,
   integer,
