@@ -81,7 +81,10 @@ async function request(url, timeout = 20000) {
       signal,
       headers: {
         "User-Agent": "RewardDesk-Updater",
-        Accept: "application/octet-stream",
+        Accept:
+          new URL(url).hostname === "api.github.com"
+            ? "application/vnd.github+json"
+            : "application/octet-stream",
       },
     });
     if ([301, 302, 303, 307, 308].includes(response.status)) {

@@ -58,7 +58,26 @@ async function launch() {
   await page
     .locator("[data-field=prompt]")
     .fill("Сразу закрываю, без Сохранить");
-  await app.close();
+  const hidden = app.evaluate(
+    ({ BrowserWindow }) =>
+      new Promise((resolve) =>
+        BrowserWindow.getAllWindows()[0].once("hide", () => resolve()),
+      ),
+  );
+  await page.locator("#window-tray").click();
+  await hidden;
+  assert.equal(
+    await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].isVisible(),
+    ),
+    false,
+  );
+  await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0].show(),
+  );
+  const closed = app.waitForEvent("close");
+  await page.locator("#window-quit").click();
+  await closed;
   app = null;
   page = await launch();
   assert.equal(
@@ -105,6 +124,30 @@ async function launch() {
     false,
     "later must suppress repeated popup this session",
   );
+  const restoreRoot = fs.mkdtempSync(path.join(out, "import-ui-"));
+  const restore = new Store(restoreRoot);
+  const recovered = restore.saveReward({
+    ...initialReward("audio"),
+    title: "Recovered local reward",
+  });
+  restore.close();
+  await app.evaluate(({ dialog }, folder) => {
+    dialog.showOpenDialog = async () => ({
+      canceled: false,
+      filePaths: [folder],
+    });
+    dialog.showMessageBox = async () => ({ response: 1 });
+  }, restoreRoot);
+  await page.locator("#recover-profile").click();
+  await page.waitForFunction(
+    () => document.querySelector("#reward-count").textContent === "2",
+  );
+  snapshot = await page.evaluate(() => desk.command("state"));
+  assert.ok(snapshot.rewards.some((r) => r.id === recovered.id));
+  assert.equal(
+    snapshot.rewards.find((r) => r.id === reward.id).items.length,
+    7,
+  );
   await app.close();
   app = null;
   const verify = new Store(profile);
@@ -121,6 +164,8 @@ async function launch() {
       historyRestoresDraftOnly: true,
       updateDialog: true,
       obsKeyUnchanged: true,
+      additiveRecovery: true,
+      trayAndFullExit: true,
     }),
   );
 })()

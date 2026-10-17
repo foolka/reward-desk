@@ -12,6 +12,37 @@
     <link rel="stylesheet" href="../overlay/caption.css" />
   </head>
   <body>
+    <div class="window-titlebar">
+      <span class="window-title"
+        ><i data-lucide="clapperboard"></i>Reward Desk</span
+      >
+      <div class="window-controls">
+        <button
+          id="window-tray"
+          title="Свернуть в трей"
+          aria-label="Свернуть в трей"
+        >
+          <i data-lucide="panel-bottom-close"></i>
+        </button>
+        <button id="window-minimize" title="Свернуть" aria-label="Свернуть">
+          <i data-lucide="minus"></i>
+        </button>
+        <button
+          id="window-maximize"
+          title="Развернуть или восстановить"
+          aria-label="Развернуть или восстановить"
+        >
+          <i data-lucide="square"></i>
+        </button>
+        <button
+          id="window-quit"
+          title="Выход из Reward Desk"
+          aria-label="Выход из Reward Desk"
+        >
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+    </div>
     <header class="app-header">
       <div class="brand">
         <i data-lucide="clapperboard"></i>
@@ -350,9 +381,15 @@
         </div>
         <div class="section-head">
           <h2>Диагностика</h2>
-          <button id="folder">
-            <i data-lucide="folder-open"></i>Папка данных
-          </button>
+          <div class="button-row">
+            <button id="recover-profile">
+              <i data-lucide="archive-restore"></i>Восстановить локальные
+              награды
+            </button>
+            <button id="folder">
+              <i data-lucide="folder-open"></i>Папка данных
+            </button>
+          </div>
         </div>
         <div id="profile-path" class="field-note"></div>
         <div id="logs"></div>

@@ -15,6 +15,54 @@
 body {
   margin: 0;
 }
+.window-titlebar {
+  height: 36px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: space-between;
+  background: #edf2f2;
+  border-bottom: 1px solid #d8dfdf;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+.window-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 12px;
+  font-size: 12px;
+}
+.window-title svg {
+  width: 16px;
+  height: 16px;
+  color: #197b6a;
+}
+.window-controls {
+  display: flex;
+  -webkit-app-region: no-drag;
+}
+.window-controls button {
+  border: 0;
+  border-radius: 0;
+  width: 44px;
+  height: 35px;
+  min-height: 35px;
+  padding: 0;
+  background: transparent;
+}
+.window-controls button:hover {
+  background: #dce7e5;
+}
+.window-controls #window-quit:hover {
+  background: #c43643;
+  color: white;
+}
+.window-controls button svg {
+  width: 16px;
+  height: 16px;
+}
 button,
 input,
 select,

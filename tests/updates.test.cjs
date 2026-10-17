@@ -27,6 +27,17 @@ const release = {
       "https://github.com/foolka/reward-desk/releases/download/v0.6.0/" + name,
   })),
 };
+
+test("default updater requests release JSON with GitHub JSON Accept header", async (t) => {
+  let requested;
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    requested = { url, options };
+    return new Response("", { status: 404 });
+  });
+  const u = new Updates({ current: "0.5.2" });
+  assert.equal((await u.check()).status, "unavailable");
+  assert.equal(requested.options.headers.Accept, "application/vnd.github+json");
+});
 test("strict semantic version checks reject downgrade and malformed versions", () => {
   assert.equal(newer("0.10.0", "0.9.9"), true);
   assert.equal(newer("0.5.0", "0.5.0"), false);

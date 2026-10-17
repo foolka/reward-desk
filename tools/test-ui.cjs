@@ -175,6 +175,7 @@ const errors = [];
       ),
       `All dynamic select chevrons inset at ${w}`,
     );
+    await page.evaluate(() => scrollTo(0, 0));
     await page.screenshot({
       path: path.join(out, `editor-${w}.png`),
       fullPage: true,
@@ -183,6 +184,7 @@ const errors = [];
   await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows()[0].setContentSize(1240, 1100),
   );
+  await page.evaluate(() => scrollTo(0, 0));
   await page.screenshot({
     path: path.join(screenshots, "video-editor.png"),
     fullPage: true,
@@ -251,6 +253,7 @@ const errors = [];
   restoreSeed.close();
   await page.evaluate(() => command("state"));
   await page.locator("#toast").waitFor({ state: "hidden" });
+  await page.evaluate(() => scrollTo(0, 0));
   await page.screenshot({
     path: path.join(screenshots, "audio-editor.png"),
     fullPage: true,

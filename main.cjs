@@ -20,12 +20,30 @@ const { TwitchAuth, safeError } = require("./core/twitch-auth.cjs");
 const { Twitch } = require("./core/twitch.cjs");
 const { ChannelRewards } = require("./core/channel-rewards.cjs");
 const { Updates, launchInstaller } = require("./core/updates.cjs");
+const {
+  selectProfile,
+  assertProfileLocation,
+  assertProfileDatabase,
+  rememberProfile,
+  recordStartup,
+} = require("./core/profile.cjs");
+const { readRecovery, restoreMissing } = require("./core/profile-recovery.cjs");
 const test = process.argv.includes("--test-mode");
-if (process.env.REWARD_DESK_TEST_DATA && test)
-  app.setPath("userData", path.resolve(process.env.REWARD_DESK_TEST_DATA));
-else app.setPath("userData", path.join(app.getPath("appData"), "RewardDesk"));
+let profileError;
+try {
+  app.setPath(
+    "userData",
+    selectProfile(
+      path.join(app.getPath("appData"), "RewardDesk"),
+      test,
+      process.env.REWARD_DESK_TEST_DATA,
+    ),
+  );
+} catch (error) {
+  profileError = error;
+}
 app.setAppUserModelId("com.fermionaplay.rewarddesk");
-const primary = app.requestSingleInstanceLock();
+const primary = profileError ? true : app.requestSingleInstanceLock();
 if (!primary) app.quit();
 let win,
   tray,
@@ -100,8 +118,17 @@ app
   .whenReady()
   .then(async () => {
     if (!primary) return;
+    if (profileError) throw profileError;
     fs.mkdirSync(root, { recursive: true });
+    assertProfileLocation(root);
+    assertProfileDatabase(root);
     store = new Store(root);
+    rememberProfile(root, store);
+    recordStartup(root, {
+      version: app.getVersion(),
+      executable: process.execPath,
+      store,
+    });
     updates = new Updates({ current: app.getVersion(), changed });
     const { backup } = require("node:sqlite");
     const backups = path.join(root, "backups");
@@ -147,6 +174,7 @@ app
       minWidth: 760,
       minHeight: 560,
       title: "Reward Desk",
+      frame: false,
       backgroundColor: "#eef1f1",
       icon: fs.existsSync(icon) ? icon : undefined,
       webPreferences: {
@@ -172,13 +200,13 @@ app
         ]),
       );
       tray.on("double-click", show);
-      win.on("close", (e) => {
-        if (!closing && !test) {
-          e.preventDefault();
-          win.hide();
-        }
-      });
     }
+    win.on("close", (event) => {
+      if (!closing) {
+        event.preventDefault();
+        app.quit();
+      }
+    });
     ipcMain.handle("command", (event, command, arg) => {
       if (
         event.sender !== win.webContents ||
@@ -226,6 +254,40 @@ async function execute(command, arg) {
   if (pendingUpdate && command !== "state")
     throw Error("Приложение готовится к обновлению");
   switch (command) {
+    case "minimize":
+      win.minimize();
+      return;
+    case "maximize":
+      if (win.isMaximized()) win.unmaximize();
+      else win.maximize();
+      return;
+    case "tray":
+      if (!tray) throw Error("Значок в трее недоступен");
+      await win.webContents.executeJavaScript("window.flushLocalDraft()");
+      win.hide();
+      return;
+    case "recover-profile": {
+      await win.webContents.executeJavaScript("window.flushLocalDraft()");
+      const choice = await dialog.showOpenDialog(win, {
+        title: "Папка резервной копии Reward Desk",
+        properties: ["openDirectory"],
+      });
+      if (choice.canceled) return;
+      const source = readRecovery(choice.filePaths[0]);
+      const missing = source.rewards.filter((r) => !store.reward(r.id));
+      const answer = await dialog.showMessageBox(win, {
+        type: "question",
+        message: `Восстановить локальные награды: ${missing.length}?`,
+        detail:
+          "Добавляются только отсутствующие локальные награды и их файлы. Текущие записи, вход Twitch и ссылка OBS не заменяются. Ничего не публикуется в Twitch.\n\n" +
+          missing.map((r) => r.title).join("\n"),
+        buttons: ["Отмена", "Восстановить"],
+        defaultId: 0,
+        cancelId: 0,
+      });
+      if (answer.response === 1) await restoreMissing(store, source);
+      break;
+    }
     case "check-updates":
       await updates.check();
       break;

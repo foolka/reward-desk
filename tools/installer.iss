@@ -32,8 +32,14 @@ Name: "desktopicon"; Description: "Создать ярлык на рабочем
 [Files]
 Source: "{#PackageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Icons]
-Name: "{group}\Reward Desk"; Filename: "{app}\RewardDesk.exe"
-Name: "{autodesktop}\Reward Desk"; Filename: "{app}\RewardDesk.exe"; Tasks: desktopicon
+Name: "{group}\Reward Desk"; Filename: "{app}\RewardDesk.exe"; WorkingDir: "{app}"; AppUserModelID: "com.fermionaplay.rewarddesk"
+Name: "{autodesktop}\Reward Desk"; Filename: "{app}\RewardDesk.exe"; WorkingDir: "{app}"; AppUserModelID: "com.fermionaplay.rewarddesk"; Tasks: desktopicon
+[Run]
+Filename: "{app}\RewardDesk.exe"; Description: "Запустить Reward Desk"; Flags: postinstall nowait skipifsilent
+[Messages]
+ru.FinishedLabel=Reward Desk установлен. Для закрепления нажмите правой кнопкой на значок запущенной программы на панели задач и выберите «Закрепить на панели задач».
+en.FinishedLabel=Reward Desk is installed. To pin it, right-click the running app's taskbar icon and choose Pin to taskbar.
+uk.FinishedLabel=Reward Desk встановлено. Щоб закріпити, натисніть правою кнопкою на значок запущеної програми на панелі завдань і виберіть «Закріпити на панелі завдань».
 [Code]
 function ProcessGuard(): String;
 var Locator, Services, Items: Variant;

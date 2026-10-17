@@ -672,6 +672,8 @@ act($("#first-create"), async () => {
   select(result.rewards.at(-1).id);
 });
 $("#search").addEventListener("input", renderList);
+for (const name of ["tray", "minimize", "maximize", "quit"])
+  act($("#window-" + name), () => command(name));
 act($("#pause"), () => command("pause", !state.paused));
 act($("#stop"), () => {
   if (
@@ -686,6 +688,7 @@ for (const name of [
   "preview",
   "reconnect",
   "folder",
+  "recover-profile",
   "logout",
   "cancel-login",
   "copy-code",
