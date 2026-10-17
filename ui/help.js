@@ -1,5 +1,7 @@
 (() => {
   const descriptions = {
+    autoUpdates:
+      "Проверяет доступный стабильный выпуск на GitHub при запуске. Установка начинается только после подтверждения, с резервной копией профиля. Приватные выпуски без отдельного доступа недоступны; токен GitHub в приложение не встроен.",
     title: "Название награды, которое зрители видят в Twitch. До 45 символов.",
     prompt:
       "Описание награды в Twitch: например, что произойдёт после покупки. До 200 символов.",
@@ -139,6 +141,7 @@
         if (descriptions[key]) labelHelp(control, key);
       });
     for (const [id, key] of Object.entries({
+      "auto-updates": "autoUpdates",
       "allow-repeats": "repeats",
       "chat-enabled": "chatEnabled",
       "chat-command": "chatCommand",

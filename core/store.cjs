@@ -17,6 +17,7 @@ class Store {
       CREATE TABLE IF NOT EXISTS media(id TEXT PRIMARY KEY, body TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY, reward_id TEXT NOT NULL, state TEXT NOT NULL, body TEXT NOT NULL, created INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS log(id INTEGER PRIMARY KEY, stamp INTEGER NOT NULL, message TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS reward_versions(id INTEGER PRIMARY KEY, reward_id TEXT NOT NULL, stamp INTEGER NOT NULL, reason TEXT NOT NULL, body TEXT NOT NULL);
       PRAGMA user_version=1;`);
     if (!this.meta("overlayToken"))
       this.setMeta("overlayToken", randomBytes(32).toString("hex"));
@@ -33,7 +34,9 @@ class Store {
     return row ? JSON.parse(row.value) : fallback;
   }
   transaction(fn) {
+    if (this.inTransaction) return fn();
     this.db.exec("BEGIN IMMEDIATE");
+    this.inTransaction = true;
     try {
       const result = fn();
       this.db.exec("COMMIT");
@@ -41,6 +44,8 @@ class Store {
     } catch (error) {
       this.db.exec("ROLLBACK");
       throw error;
+    } finally {
+      this.inTransaction = false;
     }
   }
   setMeta(key, value) {
@@ -61,10 +66,75 @@ class Store {
     return this.rewards().find((r) => r.id === id);
   }
   putReward(r) {
+    return this.transaction(() => {
+      const prior = this.reward(r.id);
+      if (prior && JSON.stringify(prior) !== JSON.stringify(r))
+        this.archiveReward(prior, "saved");
+      this.db
+        .prepare("INSERT OR REPLACE INTO rewards VALUES(?,?)")
+        .run(r.id, JSON.stringify(r));
+      return r;
+    });
+  }
+  archiveReward(r, reason) {
     this.db
-      .prepare("INSERT OR REPLACE INTO rewards VALUES(?,?)")
-      .run(r.id, JSON.stringify(r));
-    return r;
+      .prepare(
+        "INSERT INTO reward_versions(reward_id,stamp,reason,body) VALUES(?,?,?,?)",
+      )
+      .run(r.id, Date.now(), reason, JSON.stringify(r));
+    this.db
+      .prepare(
+        "DELETE FROM reward_versions WHERE reward_id=? AND id NOT IN (SELECT id FROM reward_versions WHERE reward_id=? ORDER BY id DESC LIMIT 50)",
+      )
+      .run(r.id, r.id);
+  }
+  stashDraft(value) {
+    if (!value || typeof value.id !== "string" || !this.reward(value.id))
+      throw Error("Награда не найдена");
+    const raw = JSON.stringify(value);
+    if (raw.length > 262144) throw Error("Черновик слишком большой");
+    this.setMeta("editor:" + value.id, { value, savedAt: Date.now() });
+  }
+  drafts() {
+    return Object.fromEntries(
+      this.rewards().flatMap((r) => {
+        const draft = this.meta("editor:" + r.id);
+        return draft ? [[r.id, draft]] : [];
+      }),
+    );
+  }
+  clearDraft(id) {
+    this.db.prepare("DELETE FROM meta WHERE key=?").run("editor:" + id);
+  }
+  versions(id) {
+    return this.db
+      .prepare(
+        "SELECT id,stamp,reason,body FROM reward_versions WHERE reward_id=? ORDER BY id DESC LIMIT 50",
+      )
+      .all(id)
+      .map((r) => ({ ...r, value: JSON.parse(r.body), body: undefined }));
+  }
+  restoreDraft(id, version) {
+    return this.transaction(() => {
+      const current = this.reward(id);
+      const saved = this.versions(id).find((v) => v.id === version);
+      if (!current || !saved) throw Error("Версия не найдена");
+      const draft = this.meta("editor:" + id);
+      if (draft) this.archiveReward(draft.value, "draft-before-restore");
+      const value = { ...saved.value };
+      for (const key of [
+        "id",
+        "remoteId",
+        "account",
+        "clientId",
+        "chatAccount",
+        "chatClientId",
+        "sync",
+        "createdAt",
+      ])
+        value[key] = current[key];
+      this.stashDraft(value);
+    });
   }
   saveReward(value) {
     const r = normalizeReward(value, this.reward(value.id));
@@ -78,7 +148,12 @@ class Store {
     return this.putReward(r);
   }
   deleteReward(id) {
-    this.db.prepare("DELETE FROM rewards WHERE id=?").run(id);
+    this.transaction(() => {
+      const prior = this.reward(id);
+      if (prior) this.archiveReward(prior, "deleted");
+      this.clearDraft(id);
+      this.db.prepare("DELETE FROM rewards WHERE id=?").run(id);
+    });
   }
   media(id) {
     const row = this.db.prepare("SELECT body FROM media WHERE id=?").get(id);

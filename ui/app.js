@@ -32,6 +32,9 @@ let state,
   selected = "",
   draft,
   dirty = false,
+  draftTimer,
+  draftRevision = 0,
+  exiting = false,
   toastTimer,
   saving = false,
   previewObserver;
@@ -67,6 +70,7 @@ function accept(value) {
   renderStatus();
   renderJobs();
   renderSettings();
+  renderUpdates();
   renderChatStatus();
   channelAccountChanged();
   if (selected && !dirty && !saving) {
@@ -92,16 +96,16 @@ function renderList() {
   icons();
 }
 function select(id) {
-  if (
-    dirty &&
-    !confirm("Есть несохранённые изменения. Перейти без сохранения?")
-  )
-    return;
+  if (saving) return;
+  flushLocalDraft();
   selected = id;
-  dirty = false;
-  draft = structuredClone(state.rewards.find((r) => r.id === id));
+  dirty = !!state.drafts?.[id];
+  draft = structuredClone(
+    state.drafts?.[id]?.value || state.rewards.find((r) => r.id === id),
+  );
   renderEditor();
   renderList();
+  draftStatus(dirty ? "Локальный черновик восстановлен" : "Сохранено");
 }
 function num(key, label, min, max, step = 1, value = draft) {
   return `<label>${label}<input data-field="${key}" type="number" min="${min}" max="${max}" step="${step}" value="${esc(value[key])}"></label>`;
@@ -171,7 +175,8 @@ function renderEditor() {
   <section class="editor-section"><div class="section-head"><h3>${video ? "Видео" : "Звуки"} <span class="muted" id="media-count"></span></h3><span class="muted" id="media-mode"></span></div><div class="roulette-options"><label class="check"><input id="allow-repeats" type="checkbox" ${draft.allowRepeats === true ? "checked" : ""} aria-describedby="roulette-help">Полный рандом с повторениями</label><div id="roulette-help" class="field-note"></div></div><div class="media-head" aria-hidden="true"><span>Файл</span><span>Громкость</span><span>Вес</span><span id="chance-heading"></span><span></span><span></span></div><div id="media-list" class="media-list"></div><div id="drop-zone" class="drop-zone"><button id="add-files">${icon("upload")}Добавить файлы</button><span class="formats">${video ? "MP4 · WebM" : "MP3 · WAV · OGG · M4A · FLAC"}</span></div></section>
   ${video ? `<section class="editor-section"><div class="section-head"><h3>Размещение видео</h3><select id="position-mode" aria-label="Размещение" style="width:190px"><option value="fixed">Фиксированная область</option><option value="random">Случайное место</option></select></div><div class="preview-layout"><div><div id="stage" class="stage"><div id="placement" class="placement">${icon("move")}</div></div><div class="stage-caption"><span>1920 × 1080</span><span id="coordinates"></span></div></div><div class="video-controls">${vnum("width", "Макс. ширина", 40, 1920)}${vnum("height", "Макс. высота", 40, 1080)}${vnum("x", "X", 0, 1920)}${vnum("y", "Y", 0, 1080)}${vnum("border", "Толщина рамки", 0, 40)}<label>Стиль рамки<select id="border-style"><option value="solid">Сплошная</option><option value="dashed">Пунктир</option><option value="dotted">Точки</option><option value="double">Двойная</option><option value="none">Без рамки</option></select></label>${vnum("radius", "Скругление", 0, 200)}<label>Цвет рамки<input type="color" id="border-color" value="${draft.video.color}"></label><label class="check wide"><input type="checkbox" id="tilt" ${draft.video.angle ? "checked" : ""}>Случайный наклон</label><label class="wide">Максимальный угол, ±°<input id="angle" type="range" min="0" max="45" value="${draft.video.angle}"><output id="angle-value">${draft.video.angle}°</output></label></div></div></section>` : ""}
   ${video ? captionMarkup() : ""}
-  <div class="save-footer"><button id="save" class="primary">${icon("save")}Сохранить</button><button id="publish">${icon("cloud-upload")}${draft.remoteId ? "Синхронизировать" : "Создать в Twitch"}</button></div>`;
+  <div class="save-footer"><button id="save" class="primary">${icon("save")}Сохранить</button><button id="publish">${icon("cloud-upload")}${draft.remoteId ? "Синхронизировать" : "Создать в Twitch"}</button><button id="reward-history" title="История сохранённых версий" aria-label="История сохранённых версий">${icon("history")}</button><span id="draft-status" class="field-note" role="status"></span></div>`;
+  act($("#reward-history"), showRewardHistory);
   bindSettings($("#editor"), () => draft, markDirty);
   for (const [id, key] of Object.entries({
     "chat-enabled": "enabled",
@@ -207,6 +212,7 @@ function renderEditor() {
     toast("Награда синхронизирована");
   });
   act($("#remove-reward"), async () => {
+    flushLocalDraft();
     await command("remove", selected);
     if (!state.rewards.some((r) => r.id === selected)) {
       selected = "";
@@ -262,21 +268,94 @@ function renderChatStatus() {
 }
 function markDirty() {
   dirty = true;
+  draftRevision++;
+  clearTimeout(draftTimer);
+  draftStatus("Сохранение черновика…");
+  draftTimer = setTimeout(() => {
+    try {
+      flushLocalDraft();
+    } catch (error) {
+      toast(error.message);
+    }
+  }, 250);
   if ($("#save")) $("#save").innerHTML = icon("save") + "Сохранить *";
   icons();
 }
+function draftStatus(text) {
+  if ($("#draft-status")) $("#draft-status").textContent = text;
+}
+function flushLocalDraft() {
+  clearTimeout(draftTimer);
+  if (!draft || !dirty) return;
+  const result = desk.stashDraft(draft);
+  if (!result?.ok) {
+    draftStatus("Черновик не сохранён");
+    throw Error(result?.error || "Не удалось сохранить локальный черновик");
+  }
+  state.drafts ||= {};
+  state.drafts[draft.id] = {
+    value: structuredClone(draft),
+    savedAt: Date.now(),
+  };
+  draftStatus("Черновик сохранён на этом ПК");
+}
+window.flushLocalDraft = flushLocalDraft;
+window.prepareExit = () => {
+  flushLocalDraft();
+  exiting = true;
+};
+addEventListener("beforeunload", () => {
+  if (!exiting) flushLocalDraft();
+});
+async function showRewardHistory() {
+  flushLocalDraft();
+  const id = selected;
+  const versions = await command("versions", id);
+  const modal = $("#history-dialog");
+  $("#history-list").innerHTML = versions.length
+    ? versions
+        .map(
+          (v) =>
+            `<div class="version-row"><div><strong>${esc(v.value.title)}</strong><div class="field-note">${esc(new Date(v.stamp).toLocaleString("ru"))} · ${v.value.items.length} файлов</div></div><button data-version="${v.id}" title="Открыть эту версию как черновик">${icon("rotate-ccw")}Восстановить</button></div>`,
+        )
+        .join("")
+    : '<div class="empty">Предыдущих сохранений пока нет</div>';
+  $$("[data-version]").forEach((el) =>
+    act(el, async () => {
+      flushLocalDraft();
+      dirty = false;
+      await command("restore-draft", {
+        id,
+        version: Number(el.dataset.version),
+      });
+      select(id);
+      modal.close();
+      toast("Версия открыта как черновик. Twitch не изменён.");
+    }),
+  );
+  icons();
+  modal.showModal();
+}
 async function save() {
   if (!draft || saving) return;
+  flushLocalDraft();
+  const revision = draftRevision;
   saving = true;
   try {
-    const result = await command("save", draft);
+    const result = await command("save", structuredClone(draft));
+    if (revision !== draftRevision) {
+      flushLocalDraft();
+      return;
+    }
     dirty = false;
     draft = structuredClone(result.rewards.find((r) => r.id === selected));
     $(".editor-head h2").textContent = draft.title;
     $("#save").innerHTML = icon("save") + "Сохранить";
+    draftStatus("Сохранено");
     icons();
   } finally {
     saving = false;
+    if (dirty) flushLocalDraft();
   }
 }
 async function addFiles(paths) {
@@ -540,6 +619,7 @@ function renderJobs() {
   icons();
 }
 function renderSettings() {
+  $("#profile-path").textContent = state.dataPath || "";
   $("#chat-connection-state").textContent =
     state.chat?.status || "Чат не подключён";
   $("#auth-state").textContent =
@@ -569,16 +649,12 @@ $$("[data-tab]").forEach((el) =>
     if (el.classList.contains("active")) return;
     if (saving || channelBusy) return;
     if (
-      (dirty || channelDirty) &&
+      channelDirty &&
       !confirm("Есть несохранённые изменения. Перейти без сохранения?")
     )
       return;
-    dirty = false;
+    flushLocalDraft();
     channelDirty = false;
-    if (selected) {
-      draft = structuredClone(state.rewards.find((r) => r.id === selected));
-      renderEditor();
-    }
     $$("[data-tab]").forEach((b) => b.classList.toggle("active", b === el));
     for (const name of ["rewards", "channel", "queue", "settings"])
       $("#tab-" + name).hidden = name !== el.dataset.tab;

@@ -19,6 +19,7 @@ const { Overlay } = require("./core/overlay.cjs");
 const { TwitchAuth, safeError } = require("./core/twitch-auth.cjs");
 const { Twitch } = require("./core/twitch.cjs");
 const { ChannelRewards } = require("./core/channel-rewards.cjs");
+const { Updates, launchInstaller } = require("./core/updates.cjs");
 const test = process.argv.includes("--test-mode");
 if (process.env.REWARD_DESK_TEST_DATA && test)
   app.setPath("userData", path.resolve(process.env.REWARD_DESK_TEST_DATA));
@@ -34,7 +35,10 @@ let win,
   auth,
   twitch,
   channelRewards,
+  updates,
+  pendingUpdate,
   closing = false,
+  flushing = false,
   serial = Promise.resolve();
 const root = app.getPath("userData");
 function privateSave(name, value) {
@@ -60,6 +64,7 @@ function snapshot() {
   return {
     version: app.getVersion(),
     rewards: store.rewards(),
+    drafts: store.drafts(),
     media: store.all("media"),
     jobs: store.jobs().slice(-500).reverse(),
     logs: store.logs(),
@@ -72,6 +77,11 @@ function snapshot() {
     paused: store.meta("paused", false),
     dataPath: root,
     test,
+    updates: {
+      ...updates?.state,
+      enabled: store.meta("checkUpdates", true),
+      installable: app.isPackaged && !test,
+    },
   };
 }
 function changed() {
@@ -92,6 +102,7 @@ app
     if (!primary) return;
     fs.mkdirSync(root, { recursive: true });
     store = new Store(root);
+    updates = new Updates({ current: app.getVersion(), changed });
     const { backup } = require("node:sqlite");
     const backups = path.join(root, "backups");
     fs.mkdirSync(backups, { recursive: true });
@@ -179,10 +190,28 @@ app
       serial = pending.catch(() => {});
       return pending;
     });
+    ipcMain.on("stash-draft", (event, value) => {
+      try {
+        if (
+          closing ||
+          event.sender !== win.webContents ||
+          event.senderFrame !== win.webContents.mainFrame
+        )
+          throw Error("Недопустимый источник");
+        store.stashDraft(value);
+        event.returnValue = { ok: true };
+      } catch (error) {
+        event.returnValue = { error: error.message };
+      }
+    });
     await win.loadFile(path.join(__dirname, "ui/index.html"));
     if (!test) {
       auth.resume();
       void twitch.connect();
+      if (store.meta("checkUpdates", true))
+        setTimeout(() => {
+          if (!closing) void updates.check();
+        }, 3500).unref();
     }
     setInterval(changed, 3000).unref();
   })
@@ -194,7 +223,65 @@ app
     app.exit(1);
   });
 async function execute(command, arg) {
+  if (pendingUpdate && command !== "state")
+    throw Error("Приложение готовится к обновлению");
   switch (command) {
+    case "check-updates":
+      await updates.check();
+      break;
+    case "auto-updates":
+      store.setMeta("checkUpdates", !!arg);
+      break;
+    case "install-update": {
+      if (test || !app.isPackaged)
+        throw Error("Обновление доступно только в установленной программе");
+      const busy = () =>
+        store
+          .jobs()
+          .some((j) =>
+            ["queued", "playing", "attention", "settling"].includes(j.state),
+          );
+      if (busy())
+        throw Error(
+          "Сначала завершите или отмените незавершённые награды в очереди",
+        );
+      await win.webContents.executeJavaScript("window.flushLocalDraft()");
+      const download = await updates.download(
+        path.join(app.getPath("temp"), "RewardDeskUpdates"),
+      );
+      if (busy()) {
+        updates.set({
+          status: "available",
+          release: updates.state.release,
+          message:
+            "Появились награды в очереди. Завершите их и повторите обновление.",
+        });
+        throw Error("Обновление отложено: очередь не пуста");
+      }
+      try {
+        await launchInstaller(download, {
+          profile: root,
+          executable: process.execPath,
+          pid: process.pid,
+          backupRoot: path.join(
+            process.env.LOCALAPPDATA,
+            "RewardDeskBackups",
+            "updates",
+          ),
+        });
+        pendingUpdate = download;
+        twitch.stop();
+        setTimeout(() => app.quit(), 100);
+      } catch (error) {
+        updates.set({
+          status: "available",
+          release: updates.state.release,
+          message: error.message,
+        });
+        throw error;
+      }
+      break;
+    }
     case "channel-list":
       if (test) throw Error("Twitch отключён в тестовом режиме");
       return channelRewards.list();
@@ -222,6 +309,7 @@ async function execute(command, arg) {
         throw Error("Сначала восстановите связь с Twitch кнопкой создания");
       if (prior?.remoteId && !test) twitch.assertOwner(prior);
       const r = twitch.chat.saveReward(arg);
+      store.clearDraft(r.id);
       if (
         r.remoteId &&
         (r.sync === "pending" ||
@@ -231,6 +319,12 @@ async function execute(command, arg) {
         store.putReward({ ...r, sync: "pending" });
         if (!test) await twitch.publish(r.id);
       }
+      break;
+    }
+    case "versions":
+      return store.versions(arg);
+    case "restore-draft": {
+      store.restoreDraft(arg.id, arg.version);
       break;
     }
     case "publish":
@@ -384,15 +478,64 @@ async function execute(command, arg) {
   changed();
   return snapshot();
 }
-app.on("before-quit", () => {
+app.on("before-quit", (event) => {
   if (closing) return;
+  if (win && !win.isDestroyed() && !flushing) {
+    event.preventDefault();
+    flushing = true;
+    serial
+      .then(() => win.webContents.executeJavaScript("window.prepareExit?.()"))
+      .then(() => {
+        if (pendingUpdate)
+          fs.writeFileSync(
+            path.join(pendingUpdate.folder, "commit"),
+            "install",
+            { flag: "wx" },
+          );
+        closing = true;
+        cleanup();
+        app.quit();
+      })
+      .catch(() => {
+        if (closing) {
+          dialog.showErrorBox(
+            "Reward Desk",
+            "Ошибка завершения приложения. Данные профиля не заменялись. Проверьте журнал обновления.",
+          );
+          app.exit(1);
+          return;
+        }
+        flushing = false;
+        if (pendingUpdate) {
+          pendingUpdate = null;
+          updates.set({
+            status: "available",
+            release: updates.state.release,
+            message: "Обновление отложено: не удалось сохранить черновик",
+          });
+          if (!test) void twitch.connect();
+        }
+        dialog.showErrorBox(
+          "Reward Desk",
+          "Не удалось сохранить черновик. Закрытие отменено. Нажмите «Сохранить» и повторите выход.",
+        );
+      });
+    return;
+  }
+  if (flushing) {
+    event.preventDefault();
+    return;
+  }
   closing = true;
+  cleanup();
+});
+function cleanup() {
   twitch?.close();
   auth?.dispose();
   overlay?.close();
   tray?.destroy();
   store?.close();
-});
+}
 app.on("window-all-closed", () => {
   if (!tray) app.quit();
 });

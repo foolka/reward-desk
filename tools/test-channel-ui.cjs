@@ -91,6 +91,7 @@ const snapshot = {
           dashboard: 0,
         };
         window.desk = {
+          stashDraft: () => ({ ok: true }),
           filePath: () => "",
           onState: (fn) => (window.emitState = fn),
           command: async (name, arg) => {

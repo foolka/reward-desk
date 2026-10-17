@@ -47,6 +47,7 @@ let snapshot = {
     });
     await page.addInitScript(() => {
       window.desk = {
+        stashDraft: () => ({ ok: true }),
         command: (name, arg) => window.rpc(name, arg),
         onState: (fn) => (window.emitState = fn),
         filePath() {},

@@ -354,15 +354,56 @@
             <i data-lucide="folder-open"></i>Папка данных
           </button>
         </div>
+        <div id="profile-path" class="field-note"></div>
         <div id="logs"></div>
+        <section class="editor-section">
+          <div class="section-head">
+            <h2>Обновления</h2>
+            <button id="check-updates">
+              <i data-lucide="refresh-cw"></i>Проверить
+            </button>
+          </div>
+          <label class="check"
+            ><input id="auto-updates" type="checkbox" />Проверять при
+            запуске</label
+          >
+          <div id="update-status" class="field-note" role="status"></div>
+          <button id="show-update" hidden>
+            <i data-lucide="download"></i>Открыть обновление
+          </button>
+        </section>
       </section>
     </main>
     <div id="toast" role="status" hidden></div>
+    <dialog id="history-dialog" aria-labelledby="history-title">
+      <div class="section-head">
+        <h2 id="history-title">История награды</h2>
+        <form method="dialog">
+          <button aria-label="Закрыть" title="Закрыть">
+            <i data-lucide="x"></i>
+          </button>
+        </form>
+      </div>
+      <div id="history-list"></div>
+    </dialog>
+    <dialog id="update-dialog" aria-labelledby="update-title">
+      <h2 id="update-title">Обновление Reward Desk</h2>
+      <div id="update-notes" class="update-notes"></div>
+      <div id="update-message" class="field-note" role="status"></div>
+      <progress id="update-progress" max="100" value="0" hidden></progress>
+      <div class="button-row">
+        <button id="update-later">Позже</button
+        ><button id="install-update" class="primary">
+          <i data-lucide="download"></i>Обновить и перезапустить
+        </button>
+      </div>
+    </dialog>
     <script src="../node_modules/lucide/dist/umd/lucide.js"></script>
     <script src="../overlay/geometry.js"></script>
     <script src="../overlay/caption.js"></script>
     <script src="help.js"></script>
     <script src="app.js"></script>
     <script src="channel.js"></script>
+    <script src="updates.js"></script>
   </body>
 </html>
