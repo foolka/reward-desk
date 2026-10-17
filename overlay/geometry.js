@@ -1,8 +1,17 @@
 (function (scope) {
   function layout(v, ratio, random = Math.random) {
+    if (!Number.isFinite(ratio) || ratio <= 0) ratio = 16 / 9;
     const rad = ((random() * 2 - 1) * v.angle * Math.PI) / 180;
-    let width = Math.min(v.width, v.height * ratio),
-      height = width / ratio;
+    let border =
+      v.borderStyle === "none"
+        ? 0
+        : Math.min(v.border, (Math.min(v.width, v.height) - 1) / 2);
+    const contentWidth = Math.min(
+      v.width - border * 2,
+      (v.height - border * 2) * ratio,
+    );
+    let width = contentWidth + border * 2,
+      height = contentWidth / ratio + border * 2;
     const c = Math.abs(Math.cos(rad)),
       s = Math.abs(Math.sin(rad));
     let bw = width * c + height * s,
@@ -10,6 +19,7 @@
     const scale = Math.min(1, 1920 / bw, 1080 / bh);
     width *= scale;
     height *= scale;
+    border *= scale;
     bw *= scale;
     bh *= scale;
     const cx =
@@ -25,6 +35,7 @@
       y: cy - height / 2,
       width,
       height,
+      border,
       angle: (rad * 180) / Math.PI,
       bw,
       bh,

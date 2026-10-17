@@ -88,7 +88,7 @@ function play(job) {
         width: p.width + "px",
         height: p.height + "px",
         transform: `rotate(${p.angle}deg)`,
-        border: `${v.border}px ${v.borderStyle} ${v.color}`,
+        border: `${p.border}px ${v.borderStyle} ${v.color}`,
         borderRadius: v.radius + "px",
       });
     }

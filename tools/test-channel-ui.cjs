@@ -254,6 +254,16 @@ const snapshot = {
       true,
     );
     await page.locator("#channel-open-twitch").click();
+    const readonlyHelp = page.locator(
+      '#channel-form .option-help[data-help="cost"]',
+    );
+    assert.equal(await readonlyHelp.isEnabled(), true);
+    await readonlyHelp.focus();
+    assert.match(
+      await page.locator("#option-tooltip").textContent(),
+      /баллов канала/,
+    );
+    await page.keyboard.press("Escape");
     assert.equal(await page.evaluate(() => mock.dashboard), 1);
     await page.locator("#channel-filter").selectOption("editable");
     assert.equal(await page.locator("#channel-list tr").count(), 2);

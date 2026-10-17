@@ -178,4 +178,28 @@ test("rotated video always stays inside canvas", () => {
     assert.ok(p.width <= v.width + 0.001 && p.height <= v.height + 0.001);
   }
 });
+test("video frame hugs landscape, portrait and square pixels including thick borders", () => {
+  for (const ratio of [0.25, 9 / 16, 1, 16 / 9, 2.4, 4])
+    for (const border of [0, 2, 16, 40])
+      for (const borderStyle of ["solid", "dashed", "none"])
+        for (const width of [40, 600, 1920]) {
+          const v = {
+            ...initialReward("video").video,
+            width,
+            height: 340,
+            border,
+            borderStyle,
+            angle: 45,
+          };
+          const p = layout(v, ratio, () => 1);
+          assert.ok(
+            Math.abs(
+              (p.width - 2 * p.border) / (p.height - 2 * p.border) - ratio,
+            ) < 1e-8,
+          );
+          assert.ok(p.width <= v.width + 1e-8 && p.height <= v.height + 1e-8);
+          assert.ok(p.width > p.border * 2 && p.height > p.border * 2);
+          if (borderStyle === "none") assert.equal(p.border, 0);
+        }
+});
 module.exports = { fixture };

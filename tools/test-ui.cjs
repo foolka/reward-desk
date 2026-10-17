@@ -197,6 +197,36 @@ const errors = [];
     "75.0%",
   ]);
   await page.locator("#save").click();
+  assert.equal(await page.locator("#allow-repeats").isChecked(), false);
+  await page.locator("#allow-repeats").check();
+  await page.locator("#save").click();
+  assert.equal(
+    await page.evaluate(
+      async (id) =>
+        (await desk.command("state")).rewards.find((r) => r.id === id)
+          .allowRepeats,
+      audio.id,
+    ),
+    true,
+  );
+  await page.locator("[data-weight]").nth(1).fill("5");
+  await page
+    .locator("[data-volume]")
+    .nth(1)
+    .evaluate((input) => {
+      input.value = "65";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  await page.locator("#save").click();
+  const changedMedia = await page.evaluate(
+    async (id) =>
+      (await desk.command("state")).rewards.find((r) => r.id === id).items[1],
+    audio.id,
+  );
+  assert.equal(changedMedia.weight, 5);
+  assert.equal(changedMedia.volume, 65);
+  await page.locator("#allow-repeats").uncheck();
+  await page.locator("#save").click();
   await page.waitForFunction(
     async (id) =>
       (await desk.command("state")).rewards.find((r) => r.id === id).items

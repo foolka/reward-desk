@@ -10,6 +10,7 @@ const esc = (s) =>
   );
 const icon = (name) => `<i data-lucide="${name}"></i>`;
 const icons = () => {
+  RewardHelp.enhance();
   $$("select:not([multiple]):not([size])").forEach((select) => {
     if (select.parentElement.classList.contains("select-control")) return;
     const wrapper = document.createElement("span");
@@ -32,7 +33,8 @@ let state,
   draft,
   dirty = false,
   toastTimer,
-  saving = false;
+  saving = false,
+  previewObserver;
 function toast(message) {
   $("#toast").textContent = message;
   $("#toast").hidden = false;
@@ -144,6 +146,7 @@ function bindSettings(root, getValue, changed) {
   );
 }
 function renderEditor() {
+  previewObserver?.disconnect();
   if (!draft) {
     $("#editor").innerHTML =
       `<div class="empty">${icon("gift")}<h2>Выберите или создайте награду</h2></div>`;
@@ -154,10 +157,15 @@ function renderEditor() {
   $("#editor").innerHTML =
     `<div class="editor-head"><div class="title"><h2>${esc(draft.title)}</h2><small>${draft.remoteId ? "Связана с Twitch" : "Локальный черновик"}${draft.sync === "pending" ? " · изменения не отправлены" : ""}</small></div><div class="button-row"><button id="test-reward">${icon("play")}Тест</button><button id="remove-reward" class="danger" title="Удалить награду">${icon("trash-2")}</button></div></div>
   ${settingsMarkup(draft)}
-  <section class="editor-section"><div class="section-head"><h3>${video ? "Видео" : "Звуки"} <span class="muted" id="media-count"></span></h3><span class="muted" id="media-mode"></span></div><div id="media-list" class="media-list"></div><div id="drop-zone" class="drop-zone"><button id="add-files">${icon("upload")}Добавить файлы</button><span class="formats">${video ? "MP4 · WebM" : "MP3 · WAV · OGG · M4A · FLAC"}</span></div></section>
+  <section class="editor-section"><div class="section-head"><h3>${video ? "Видео" : "Звуки"} <span class="muted" id="media-count"></span></h3><span class="muted" id="media-mode"></span></div><div class="roulette-options"><label class="check"><input id="allow-repeats" type="checkbox" ${draft.allowRepeats === true ? "checked" : ""} aria-describedby="roulette-help">Полный рандом с повторениями</label><div id="roulette-help" class="field-note"></div></div><div class="media-head" aria-hidden="true"><span>Файл</span><span>Громкость</span><span>Вес</span><span id="chance-heading"></span><span></span><span></span></div><div id="media-list" class="media-list"></div><div id="drop-zone" class="drop-zone"><button id="add-files">${icon("upload")}Добавить файлы</button><span class="formats">${video ? "MP4 · WebM" : "MP3 · WAV · OGG · M4A · FLAC"}</span></div></section>
   ${video ? `<section class="editor-section"><div class="section-head"><h3>Размещение видео</h3><select id="position-mode" aria-label="Размещение" style="width:190px"><option value="fixed">Фиксированная область</option><option value="random">Случайное место</option></select></div><div class="preview-layout"><div><div id="stage" class="stage"><div id="placement" class="placement">${icon("move")}</div></div><div class="stage-caption"><span>1920 × 1080</span><span id="coordinates"></span></div></div><div class="video-controls">${vnum("width", "Макс. ширина", 40, 1920)}${vnum("height", "Макс. высота", 40, 1080)}${vnum("x", "X", 0, 1920)}${vnum("y", "Y", 0, 1080)}${vnum("border", "Толщина рамки", 0, 40)}<label>Стиль рамки<select id="border-style"><option value="solid">Сплошная</option><option value="dashed">Пунктир</option><option value="dotted">Точки</option><option value="double">Двойная</option><option value="none">Без рамки</option></select></label>${vnum("radius", "Скругление", 0, 200)}<label>Цвет рамки<input type="color" id="border-color" value="${draft.video.color}"></label><label class="check wide"><input type="checkbox" id="tilt" ${draft.video.angle ? "checked" : ""}>Случайный наклон</label><label class="wide">Максимальный угол, ±°<input id="angle" type="range" min="0" max="45" value="${draft.video.angle}"><output id="angle-value">${draft.video.angle}°</output></label></div></div></section>` : ""}
   <div class="save-footer"><button id="save" class="primary">${icon("save")}Сохранить</button><button id="publish">${icon("cloud-upload")}${draft.remoteId ? "Синхронизировать" : "Создать в Twitch"}</button></div>`;
   bindSettings($("#editor"), () => draft, markDirty);
+  $("#allow-repeats").addEventListener("change", (event) => {
+    draft.allowRepeats = event.target.checked;
+    markDirty();
+    percentages();
+  });
   act($("#save"), save);
   act($("#publish"), async () => {
     if (draft.sync !== "creating") await save();
@@ -236,18 +244,21 @@ function renderMedia() {
   $("#media-list").innerHTML = draft.items
     .map((i) => {
       const m = state.media.find((m) => m.id === i.id);
-      return `<div class="media-row" data-item="${i.id}"><div class="media-name">${esc(m?.name || "Файл отсутствует")}<small>${((m?.size || 0) / 1024 / 1024).toFixed(1)} МБ</small></div><label>Громкость <span class="volume-value">${i.volume}%</span><input data-volume type="range" min="0" max="100" value="${i.volume}" aria-label="Громкость ${esc(m?.name)}"></label><label>Вес<input data-weight type="number" min="0" max="10000" step="1" value="${i.weight}"></label><span class="chance"></span><button data-play title="Тест файла в OBS">${icon("play")}</button><button data-remove class="danger" title="Убрать файл">${icon("x")}</button></div>`;
+      return `<div class="media-row" data-item="${i.id}"><div class="media-name">${esc(m?.name || "Файл отсутствует")}<small>${((m?.size || 0) / 1024 / 1024).toFixed(1)} МБ</small></div><div class="media-volume"><input data-volume type="range" min="0" max="100" value="${i.volume}" aria-label="Громкость ${esc(m?.name)}"><output class="volume-value">${i.volume}%</output></div><input data-weight type="number" min="0" max="10000" step="1" value="${i.weight}" aria-label="Вес ${esc(m?.name)}"><span class="chance"></span><button data-play title="Тест файла в OBS">${icon("play")}</button><button data-remove class="danger" title="Убрать файл">${icon("x")}</button></div>`;
     })
     .join("");
   $$(".media-row").forEach((row) => {
     const i = draft.items.find((i) => i.id === row.dataset.item);
     row.querySelector("[data-volume]").addEventListener("input", (e) => {
-      i.volume = Number(e.target.value);
-      row.querySelector(".volume-value").textContent = i.volume + "%";
+      const item = draft.items.find((item) => item.id === row.dataset.item);
+      item.volume = Number(e.target.value);
+      row.querySelector(".volume-value").textContent = item.volume + "%";
       markDirty();
     });
     row.querySelector("[data-weight]").addEventListener("input", (e) => {
-      i.weight = Number(e.target.value);
+      draft.items.find((item) => item.id === row.dataset.item).weight = Number(
+        e.target.value,
+      );
       markDirty();
       percentages();
     });
@@ -267,6 +278,13 @@ function renderMedia() {
   icons();
 }
 function percentages() {
+  const heading = $("#chance-heading");
+  if (heading.firstChild?.nodeType !== Node.TEXT_NODE)
+    heading.prepend(document.createTextNode(""));
+  heading.firstChild.textContent = draft.allowRepeats ? "Шанс" : "Доля";
+  $("#roulette-help").textContent = draft.allowRepeats
+    ? "Включено: каждый запуск выбирает из всех файлов с учётом веса. Один файл может выпасть несколько раз подряд."
+    : "Выключено: каждый файл с весом больше нуля выпадет один раз за цикл. Цикл общий для всех зрителей и сохраняется после перезапуска. Вес влияет на порядок, а не число показов за цикл.";
   const total = draft.items.reduce((n, i) => n + i.weight, 0);
   $$(".media-row").forEach((row) => {
     const i = draft.items.find((i) => i.id === row.dataset.item);
@@ -330,6 +348,8 @@ function bindVideo() {
   });
   el.addEventListener("pointerup", () => (drag = null));
   el.addEventListener("pointercancel", () => (drag = null));
+  previewObserver = new ResizeObserver(updatePlacement);
+  previewObserver.observe($("#stage"));
   updatePlacement();
 }
 function constrain() {
@@ -342,32 +362,43 @@ function updatePlacement() {
   const v = draft.video,
     p = $("#placement"),
     scale = $("#stage").getBoundingClientRect().width / 1920;
-  Object.assign(p.style, {
-    left: v.x / 19.2 + "%",
-    top: v.y / 10.8 + "%",
-    width: v.width / 19.2 + "%",
-    height: v.height / 10.8 + "%",
-    border: `${v.border * scale}px ${v.borderStyle} ${v.color}`,
-    borderRadius: v.radius * scale + "px",
-    opacity: v.mode === "random" ? ".5" : "1",
-  });
-  $("#coordinates").textContent =
-    `${Math.round(v.x)}, ${Math.round(v.y)} · ${v.width} × ${v.height}`;
-  for (const key of ["x", "y"])
-    if (document.activeElement !== $(`[data-video="${key}"]`))
-      $(`[data-video="${key}"]`).value = v[key];
-  const first = draft.items[0]?.id;
+  const first = draft.items[0]?.id || "";
   if (p.dataset.media !== first) {
     p.querySelector("video")?.remove();
+    p.dataset.media = first;
     if (first) {
       const video = document.createElement("video");
       video.muted = true;
       video.preload = "metadata";
+      video.onloadedmetadata = () => {
+        if (!p.isConnected) return;
+        updatePlacement();
+        if (Number.isFinite(video.duration) && video.duration > 0)
+          video.currentTime = Math.min(0.05, video.duration / 2);
+      };
       video.src = state.overlay.url + "media/" + first;
       p.prepend(video);
     }
-    p.dataset.media = first || "";
   }
+  const video = p.querySelector("video");
+  const ratio =
+    video?.videoWidth && video.videoHeight
+      ? video.videoWidth / video.videoHeight
+      : v.width / v.height;
+  const frame = RewardGeometry.layout({ ...v, mode: "fixed", angle: 0 }, ratio);
+  Object.assign(p.style, {
+    left: frame.x / 19.2 + "%",
+    top: frame.y / 10.8 + "%",
+    width: frame.width / 19.2 + "%",
+    height: frame.height / 10.8 + "%",
+    border: `${frame.border * scale}px ${v.borderStyle} ${v.color}`,
+    borderRadius: v.radius * scale + "px",
+  });
+  $("#coordinates").textContent =
+    `${Math.round(frame.x)}, ${Math.round(frame.y)} · ${Math.round(frame.width)} × ${Math.round(frame.height)}`;
+  for (const key of ["x", "y"])
+    if (document.activeElement !== $(`[data-video="${key}"]`))
+      $(`[data-video="${key}"]`).value = v[key];
 }
 function renderStatus() {
   $(".version").textContent = "PRIVATE " + state.version;

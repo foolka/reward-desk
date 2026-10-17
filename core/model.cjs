@@ -38,6 +38,7 @@ function initialReward(kind = "audio") {
     userLimit: 0,
     cooldown: 0,
     skipQueue: false,
+    allowRepeats: false,
     items: [],
     video: {
       mode: "fixed",
@@ -100,6 +101,9 @@ function normalizeReward(input, prior) {
     throw Error("Выберите звук или видео");
   const r = { ...initialReward(input.kind), ...normalizeSettings(input) },
     v = input.video || r.video;
+  r.allowRepeats = input.allowRepeats ?? prior?.allowRepeats ?? false;
+  if (typeof r.allowRepeats !== "boolean")
+    throw Error("Неверный режим рулетки");
   if (
     !["fixed", "random"].includes(v.mode) ||
     !["solid", "dashed", "dotted", "double", "none"].includes(v.borderStyle)
@@ -173,6 +177,21 @@ function choose(items, rng = randomInt) {
   }
   throw Error("Некорректный генератор случайных чисел");
 }
+function chooseCycle(items, previous = {}, rng = randomInt) {
+  const active = items.filter((item) => item.weight > 0);
+  const used = new Set(previous.used || []);
+  let remaining = active.filter((item) => !used.has(item.id));
+  if (!remaining.length) {
+    used.clear();
+    remaining = active;
+  }
+  // Keep the last item out of the first draw of a new cycle, when possible.
+  if (!used.size && remaining.length > 1)
+    remaining = remaining.filter((item) => item.id !== previous.last);
+  const selected = choose(remaining, rng);
+  used.add(selected.id);
+  return { selected, cycle: { used: [...used], last: selected.id } };
+}
 module.exports = {
   initialReward,
   normalizeReward,
@@ -180,5 +199,6 @@ module.exports = {
   fromTwitch,
   twitchFields,
   choose,
+  chooseCycle,
   integer,
 };

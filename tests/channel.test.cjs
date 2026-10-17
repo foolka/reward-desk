@@ -41,6 +41,7 @@ function fixture(t) {
     account: "owner",
     clientId: "client",
     sync: "synced",
+    allowRepeats: true,
     items: [{ id: "audio", volume: 37, weight: 9 }],
   };
   const records = [local];
@@ -140,6 +141,7 @@ test("channel list includes foreign rewards but only API-approved IDs are editab
   assert.equal(c.items[1].manageable, false);
   assert.equal(c.items[1].settings.background, "#ab1234");
   assert.equal(c.items[1].settings.cost, 456);
+  assert.equal(f.records[0].allowRepeats, true);
   assert.equal(
     f.requests[0].url.searchParams.get("only_manageable_rewards"),
     "false",
@@ -166,6 +168,7 @@ test("channel edits preserve media, IDs and other rewards and sync local setting
     }),
   );
   const r = f.records[0];
+  assert.equal(r.allowRepeats, true);
   assert.equal(r.cost, 450);
   assert.equal(r.background, "#ff6600");
   assert.deepEqual(r.items, before.items);

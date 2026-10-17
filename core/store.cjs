@@ -32,6 +32,17 @@ class Store {
     const row = this.db.prepare("SELECT value FROM meta WHERE key=?").get(key);
     return row ? JSON.parse(row.value) : fallback;
   }
+  transaction(fn) {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const result = fn();
+      this.db.exec("COMMIT");
+      return result;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
   setMeta(key, value) {
     this.db
       .prepare("INSERT OR REPLACE INTO meta VALUES(?,?)")

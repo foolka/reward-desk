@@ -215,7 +215,13 @@ function renderChannelEditor() {
   $("#channel-editor").innerHTML =
     `<div class="editor-head"><h2>${esc(r.settings.title)}</h2><span class="status">${r.manageable ? "Редактирование" : "Только просмотр"}</span></div>
     ${!r.manageable ? '<div class="notice">Награда создана вне этой регистрации Reward Desk. Twitch API не разрешает её изменение здесь.</div><button id="channel-open-twitch">' + icon("external-link") + "Открыть в Twitch</button>" : ""}
-    <form id="channel-form"><fieldset ${!r.manageable || channelBusy ? "disabled" : ""}>${settingsMarkup(channelDraft)}<div class="save-footer" ${!r.manageable ? "hidden" : ""}><button type="button" id="channel-reset" title="Отменить изменения">${icon("undo-2")}</button><button id="channel-save" type="submit" class="primary">${icon("save")}Сохранить в Twitch${channelDirty ? " *" : ""}</button></div></fieldset></form>`;
+    <form id="channel-form"><fieldset class="${r.manageable ? "" : "readonly"}" ${channelBusy ? "disabled" : ""}>${settingsMarkup(channelDraft)}<div class="save-footer" ${!r.manageable ? "hidden" : ""}><button type="button" id="channel-reset" title="Отменить изменения">${icon("undo-2")}</button><button id="channel-save" type="submit" class="primary">${icon("save")}Сохранить в Twitch${channelDirty ? " *" : ""}</button></div></fieldset></form>`;
+  if (!r.manageable)
+    $("#channel-form")
+      .querySelectorAll("input, select, textarea, button")
+      .forEach((control) => {
+        control.disabled = true;
+      });
   bindSettings(
     $("#channel-form"),
     () => channelDraft,

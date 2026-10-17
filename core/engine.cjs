@@ -1,20 +1,44 @@
 const { randomUUID } = require("node:crypto");
-const { choose } = require("./model.cjs");
+const { choose, chooseCycle } = require("./model.cjs");
 const TERMINAL = ["done", "refunded", "failed", "external"];
 class Engine {
-  constructor(store, changed = () => {}) {
+  constructor(store, changed = () => {}, rng) {
     this.store = store;
     this.changed = changed;
+    this.rng = rng;
   }
   enqueue(reward, event = null, itemId = null) {
     const id = event ? `${event.account}:${event.id}` : `test:${randomUUID()}`;
+    const job = this.store.transaction(() =>
+      this.createJob(id, reward, event, itemId),
+    );
+    this.changed();
+    return job;
+  }
+  createJob(id, reward, event, itemId) {
     if (this.store.job(id)) return this.store.job(id);
     let selected,
+      cycle,
       detail = "";
+    const cycleKey =
+      "roulette:" +
+      JSON.stringify([
+        reward.account || event?.account || "",
+        reward.clientId || "",
+        reward.id,
+      ]);
     try {
-      selected = itemId
-        ? reward.items.find((i) => i.id === itemId)
-        : choose(reward.items);
+      if (itemId) selected = reward.items.find((i) => i.id === itemId);
+      else if (reward.allowRepeats === true) {
+        selected = choose(reward.items, this.rng);
+        cycle = { used: [], last: selected.id };
+      } else {
+        ({ selected, cycle } = chooseCycle(
+          reward.items,
+          this.store.meta(cycleKey, {}),
+          this.rng,
+        ));
+      }
       if (!selected || !this.store.media(selected.id))
         throw Error("Медиа не найдено");
     } catch (e) {
@@ -46,8 +70,9 @@ class Engine {
       video: { ...reward.video },
       kind: reward.kind,
     };
-    this.store.insertJob(job);
-    this.changed();
+    // Reserve the draw and queue entry together; retries reuse the stored item.
+    if (this.store.insertJob(job) && !detail && cycle)
+      this.store.setMeta(cycleKey, cycle);
     return job;
   }
   next(account) {
