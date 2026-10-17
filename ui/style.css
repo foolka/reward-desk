@@ -231,13 +231,118 @@ aside {
 .aside-head span {
   color: #7d898a;
 }
-.create-row {
+.reward-kinds {
   display: flex;
+  border-bottom: 1px solid #b9cccc;
+  margin-bottom: 12px;
+}
+.reward-kinds button {
+  flex: 1;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  border-bottom: 3px solid transparent;
+}
+.reward-kinds button.active {
+  color: #126b5c;
+  border-bottom-color: #167c6b;
+  background: #dcece7;
+  font-weight: 700;
+}
+.reward-group-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 15px 4px 5px;
+  color: #506d69;
+  font-weight: 600;
+  font-size: 12px;
+}
+.reward-group-heading span:first-child {
+  overflow-wrap: anywhere;
+}
+.reward-swatch {
+  width: 5px;
+  align-self: stretch;
+  min-height: 32px;
+  flex: 0 0 5px;
+  border-radius: 2px;
+}
+.group-picker,
+.group-fields {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.group-picker .select-control,
+.group-fields label:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.group-members {
+  max-height: 40vh;
+  overflow: auto;
+  border-top: 1px solid #cbd7d6;
+  border-bottom: 1px solid #cbd7d6;
+  margin-bottom: 16px;
+}
+.group-member {
+  padding: 10px 0;
+  margin: 0;
+  border-bottom: 1px solid #e1e8e6;
+}
+.group-member span {
+  overflow-wrap: anywhere;
+}
+#groups-dialog {
+  width: 560px;
+  max-width: calc(100vw - 32px);
+}
+#group-result {
+  white-space: pre-line;
+  margin-bottom: 12px;
+}
+.source-health {
+  flex: 0 0 auto;
+  padding: 6px 28px;
+  background: #fff0d7;
+  color: #84501d;
+  font-size: 12px;
+  border-bottom: 1px solid #d5dfdc;
+  overflow-wrap: anywhere;
+}
+.source-health.ready {
+  background: #e6f0eb;
+  color: #286755;
+}
+.obs-fields {
+  display: grid;
+  grid-template-columns: 110px minmax(120px, 1fr) 40px;
+  align-items: end;
+  gap: 10px;
+}
+.obs-recovery details {
+  margin-top: 16px;
+}
+.obs-recovery summary {
+  cursor: pointer;
+  font-size: 12px;
+}
+.obs-recovery > .check {
+  margin: 12px 0;
+}
+.create-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px;
   gap: 8px;
   margin: 18px 0 12px;
 }
 .create-row button {
-  flex: 1;
+  min-width: 0;
+  padding: 8px 6px;
+  gap: 6px;
+  white-space: normal;
 }
 input,
 select,

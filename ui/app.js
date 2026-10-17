@@ -30,6 +30,8 @@ const icons = () => {
 };
 let state,
   selected = "",
+  rewardKind = "audio",
+  selectedByKind = {},
   previewItemId = "",
   draft,
   dirty = false,
@@ -86,6 +88,7 @@ function accept(value) {
   renderJobs();
   renderSettings();
   renderUpdates();
+  renderObsRecovery();
   renderChatStatus();
   channelAccountChanged();
   if (selected && !dirty && !saving) {
@@ -98,14 +101,42 @@ function accept(value) {
   }
 }
 function renderList() {
-  $("#reward-count").textContent = state.rewards.length;
+  const rewards = state.rewards.filter((r) => r.kind === rewardKind);
+  $("#reward-count").textContent = rewards.length;
+  $$("[data-kind-tab]").forEach((button) => {
+    const active = button.dataset.kindTab === rewardKind;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+    button.tabIndex = active ? 0 : -1;
+  });
   const term = $("#search").value.toLowerCase();
-  $("#reward-list").innerHTML = state.rewards
-    .filter((r) => r.title.toLowerCase().includes(term))
-    .map(
-      (r) =>
-        `<button class="reward-item ${r.id === selected ? "active" : ""}" data-id="${r.id}">${icon(r.kind === "video" ? "film" : "audio-lines")}<div><strong>${esc(r.title)}</strong><small>${r.cost.toLocaleString("ru")} баллов · ${r.items.length} файлов · ${r.remoteId ? "Twitch" : "Черновик"}</small></div></button>`,
-    )
+  const filtered = rewards.filter((r) => r.title.toLowerCase().includes(term));
+  const sections = [
+    ...(state.groups || []),
+    {
+      id: "",
+      name: "Без группы",
+      members: filtered
+        .filter(
+          (r) => !(state.groups || []).some((g) => g.members.includes(r.id)),
+        )
+        .map((r) => r.id),
+    },
+  ];
+  $("#reward-list").innerHTML = sections
+    .map((group) => {
+      const items = filtered.filter((r) => group.members.includes(r.id));
+      if (!items.length) return "";
+      return (
+        `${state.groups?.length ? `<div class="reward-group-heading"><span>${esc(group.name)}</span><span>${items.length}</span></div>` : ""}` +
+        items
+          .map(
+            (r) =>
+              `<button class="reward-item ${r.id === selected ? "active" : ""}" data-id="${r.id}"><span class="reward-swatch" style="background:${esc(r.background)}"></span>${icon(r.kind === "video" ? "film" : "audio-lines")}<div><strong>${esc(r.title)}</strong><small>${r.cost.toLocaleString("ru")} баллов · ${r.items.length} файлов · ${r.remoteId ? "Twitch" : "Черновик"}</small></div></button>`,
+          )
+          .join("")
+      );
+    })
     .join("");
   $$(".reward-item").forEach((el) => act(el, () => select(el.dataset.id)));
   icons();
@@ -114,6 +145,10 @@ function select(id) {
   if (saving) return;
   flushLocalDraft();
   selected = id;
+  if (id) {
+    rewardKind = state.rewards.find((r) => r.id === id)?.kind || rewardKind;
+    selectedByKind[rewardKind] = id;
+  }
   dirty = !!state.drafts?.[id];
   draft = structuredClone(
     state.drafts?.[id]?.value || state.rewards.find((r) => r.id === id),
@@ -132,7 +167,7 @@ function check(key, label, value = draft) {
   return `<label class="check"><input data-field="${key}" type="checkbox" ${value[key] ? "checked" : ""}>${label}</label>`;
 }
 function limit(key, label, max, value = draft) {
-  return `<label>${label}<div class="limit-line"><input type="checkbox" data-limit="${key}" ${value[key] ? "checked" : ""} aria-label="Включить ${label}"><input data-field="${key}" type="number" min="1" max="${max}" value="${esc(value[key] || 1)}" ${value[key] ? "" : "disabled"} aria-label="${label}"></div></label>`;
+  return `<label>${label}<div class="limit-line"><input type="checkbox" data-limit="${key}" ${value[key] ? "checked" : ""} aria-label="Включить ${label}"><input data-field="${key}" type="number" min="0" max="${max}" value="${esc(value[key] || 0)}" ${value[key] ? "" : "disabled"} aria-label="${label}"></div></label>`;
 }
 function settingsMarkup(value) {
   return `<div class="form-grid"><label>Название<input data-field="title" maxlength="45" value="${esc(value.title)}"></label>${num("cost", "Баллы", 1, 1000000000, 1, value)}<label>Цвет<input data-field="background" type="color" value="${esc(value.background)}"></label><label class="wide">Описание<textarea data-field="prompt" maxlength="200">${esc(value.prompt)}</textarea></label></div>
@@ -144,6 +179,12 @@ function bindSettings(root, getValue, changed) {
   root.querySelectorAll("[data-field]").forEach((el) =>
     el.addEventListener("input", () => {
       const value = getValue();
+      const toggle = root.querySelector(`[data-limit="${el.dataset.field}"]`);
+      if (toggle && !toggle.checked) {
+        value[el.dataset.field] = 0;
+        el.value = 0;
+        return;
+      }
       value[el.dataset.field] =
         el.type === "checkbox"
           ? el.checked
@@ -160,7 +201,11 @@ function bindSettings(root, getValue, changed) {
       const value = getValue();
       const field = root.querySelector(`[data-field="${el.dataset.limit}"]`);
       field.disabled = !el.checked;
-      value[el.dataset.limit] = el.checked ? Number(field.value) : 0;
+      value[el.dataset.limit] = el.checked
+        ? Math.max(1, Number(field.value))
+        : 0;
+      field.value = value[el.dataset.limit];
+      field.min = el.checked ? 1 : 0;
       changed();
     }),
   );
@@ -780,11 +825,38 @@ $$("[data-tab]").forEach((el) =>
     if (el.dataset.tab === "channel") await loadChannel();
   }),
 );
-for (const kind of ["audio", "video"])
-  act($("#new-" + kind), async () => {
-    const result = await command("new", kind);
-    select(result.rewards.at(-1).id);
+for (const button of $$("[data-kind-tab]")) {
+  act(button, () => {
+    if (saving) return;
+    const kind = button.dataset.kindTab;
+    const next =
+      state.rewards.find(
+        (r) => r.id === selectedByKind[kind] && r.kind === kind,
+      ) || state.rewards.find((r) => r.kind === kind);
+    rewardKind = kind;
+    select(next?.id || "");
   });
+  button.addEventListener("keydown", (e) => {
+    if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) {
+      e.preventDefault();
+      const kind =
+        e.key === "Home"
+          ? "audio"
+          : e.key === "End"
+            ? "video"
+            : rewardKind === "audio"
+              ? "video"
+              : "audio";
+      const next = $(`#kind-${kind}`);
+      next.click();
+      next.focus();
+    }
+  });
+}
+act($("#new-reward"), async () => {
+  const result = await command("new", rewardKind);
+  select(result.rewards.at(-1).id);
+});
 act($("#first-create"), async () => {
   const result = await command("new", "audio");
   select(result.rewards.at(-1).id);

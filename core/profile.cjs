@@ -55,6 +55,7 @@ function assertProfileLocation(root, io = fs) {
         "rewards.sqlite-shm",
         "profile-identity.json",
         "auth.bin",
+        "obs-control.bin",
       ].map((name) => path.join(root, name)),
     ];
     for (const file of files) {

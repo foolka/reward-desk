@@ -72,6 +72,7 @@
         <i data-lucide="square"></i>
       </button>
     </nav>
+    <div id="source-health" class="source-health" role="status"></div>
     <main>
       <section id="tab-rewards" class="workspace">
         <aside>
@@ -79,9 +80,36 @@
             <h2>Мои награды</h2>
             <span id="reward-count">0</span>
           </div>
+          <div class="reward-kinds" role="tablist" aria-label="Тип наград">
+            <button
+              id="kind-audio"
+              data-kind-tab="audio"
+              role="tab"
+              aria-selected="true"
+              class="active"
+            >
+              <i data-lucide="audio-lines"></i>Звук
+            </button>
+            <button
+              id="kind-video"
+              data-kind-tab="video"
+              role="tab"
+              aria-selected="false"
+            >
+              <i data-lucide="film"></i>Видео
+            </button>
+          </div>
           <div class="create-row">
-            <button id="new-audio"><i data-lucide="audio-lines"></i>Звук</button
-            ><button id="new-video"><i data-lucide="film"></i>Видео</button>
+            <button id="new-reward">
+              <i data-lucide="plus"></i>Новая награда
+            </button>
+            <button
+              id="manage-groups"
+              title="Группы наград"
+              aria-label="Группы наград"
+            >
+              <i data-lucide="folders"></i>
+            </button>
           </div>
           <input
             id="search"
@@ -377,6 +405,54 @@
                 <i data-lucide="monitor-play"></i>Предпросмотр
               </button>
             </div>
+            <section class="editor-section obs-recovery">
+              <div class="section-head">
+                <h3>Защита источника OBS</h3>
+                <button
+                  class="option-help"
+                  data-help="obsRecovery"
+                  aria-label="Об автовосстановлении OBS"
+                >
+                  <i data-lucide="circle-help"></i>
+                </button>
+              </div>
+              <div
+                id="obs-recovery-status"
+                class="field-note"
+                role="status"
+              ></div>
+              <label class="check"
+                ><input id="obs-auto" type="checkbox" />Автоматически обновлять
+                потерянный источник</label
+              >
+              <button id="obs-local">
+                <i data-lucide="shield-check"></i>Настроить защиту OBS
+              </button>
+              <details>
+                <summary>Дополнительные настройки подключения</summary>
+                <div class="obs-fields">
+                  <label
+                    >Порт OBS<input
+                      id="obs-ws-port"
+                      type="number"
+                      min="1024"
+                      max="65535"
+                      value="4455" /></label
+                  ><label
+                    >Пароль<input
+                      id="obs-ws-password"
+                      type="password"
+                      autocomplete="new-password" /></label
+                  ><button
+                    id="obs-connect"
+                    title="Подключить OBS"
+                    aria-label="Подключить OBS"
+                  >
+                    <i data-lucide="plug"></i>
+                  </button>
+                </div>
+              </details>
+            </section>
           </div>
         </div>
         <div class="section-head">
@@ -412,6 +488,42 @@
       </section>
     </main>
     <div id="toast" role="status" hidden></div>
+    <dialog id="groups-dialog" aria-labelledby="groups-title">
+      <div class="section-head">
+        <h2 id="groups-title">Группы наград</h2>
+        <form method="dialog">
+          <button title="Закрыть" aria-label="Закрыть">
+            <i data-lucide="x"></i>
+          </button>
+        </form>
+      </div>
+      <div class="group-picker">
+        <select id="group-select" aria-label="Группа"></select
+        ><button id="group-new" title="Новая группа" aria-label="Новая группа">
+          <i data-lucide="folder-plus"></i>
+        </button>
+      </div>
+      <div class="group-fields">
+        <label>Название<input id="group-name" maxlength="60" /></label
+        ><label
+          >Цвет<input id="group-color" type="color" value="#239d89"
+        /></label>
+      </div>
+      <div id="group-members" class="group-members"></div>
+      <div id="group-result" class="field-note" role="status"></div>
+      <div class="button-row">
+        <button id="group-save" class="primary">
+          <i data-lucide="palette"></i>Сохранить и применить цвет</button
+        ><button
+          id="group-delete"
+          class="danger"
+          title="Удалить группу, сохранив награды"
+          aria-label="Удалить группу"
+        >
+          <i data-lucide="trash-2"></i>
+        </button>
+      </div>
+    </dialog>
     <dialog
       id="confirm-dialog"
       aria-labelledby="confirm-title"
@@ -453,6 +565,8 @@
     <script src="help.js"></script>
     <script src="app.js"></script>
     <script src="channel.js"></script>
+    <script src="groups.js"></script>
+    <script src="obs.js"></script>
     <script src="updates.js"></script>
   </body>
 </html>

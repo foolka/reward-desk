@@ -158,7 +158,7 @@ async function waitDone(page, id) {
         const title = document
           .querySelector(".window-titlebar")
           .getBoundingClientRect();
-        const nav = document.querySelector(".top-nav").getBoundingClientRect();
+        const nav = document.querySelector("#source-health").getBoundingClientRect();
         return {
           y: scrollY,
           scroll: main.scrollTop,

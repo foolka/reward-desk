@@ -261,7 +261,7 @@ test("invalid settings never reach Twitch, unchanged settings do not PATCH", asy
   await f.channel.save(edit(c, "ours", {}));
   assert.equal(f.requests.filter((r) => r.method === "PATCH").length, 0);
 });
-test("disabling limits sends flags and valid defaults", async (t) => {
+test("disabling limits sends flags without placeholder values", async (t) => {
   const f = fixture(t);
   f.remotes[0] = responseReward("ours", {
     ...initialReward(),
@@ -275,9 +275,10 @@ test("disabling limits sends flags and valid defaults", async (t) => {
   );
   const body = f.requests.find((r) => r.method === "PATCH").body;
   assert.equal(body.is_max_per_stream_enabled, false);
-  assert.equal(body.max_per_stream, 1);
+  assert.equal(body.max_per_stream, undefined);
+  assert.equal(body.max_per_user_per_stream, undefined);
   assert.equal(body.is_global_cooldown_enabled, false);
-  assert.equal(body.global_cooldown_seconds, 1);
+  assert.equal(body.global_cooldown_seconds, undefined);
 });
 test("refresh recovers a lost PATCH response without resending or losing media", async (t) => {
   const f = fixture(t),

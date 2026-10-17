@@ -5,7 +5,10 @@ const loadedBuild = document.querySelector(
 let client = "",
   current = null,
   source,
-  watchdog;
+  watchdog,
+  reconnectTimer,
+  lastSignal = Date.now(),
+  retryDelay = 1000;
 function resize() {
   const s = Math.min(innerWidth / 1920, innerHeight / 1080);
   stage.style.transform = `scale(${s})`;
@@ -20,7 +23,8 @@ async function ack(type, id = "") {
     const r = await fetch("ack", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ client, type, id }),
+      body: JSON.stringify({ client, type, id, build: loadedBuild }),
+      signal: AbortSignal.timeout(5000),
     });
     if (r.status === 409) connect();
   } catch {}
@@ -36,11 +40,14 @@ function stop() {
   }
 }
 function connect() {
+  clearTimeout(reconnectTimer);
   source?.close();
   stop();
   client = "";
   source = new EventSource("events");
   source.addEventListener("hello", (e) => {
+    lastSignal = Date.now();
+    retryDelay = 1000;
     const hello = JSON.parse(e.data);
     if (loadedBuild && hello.build && loadedBuild !== hello.build) {
       source.close();
@@ -51,15 +58,23 @@ function connect() {
     void ack("ready");
   });
   source.addEventListener("ping", () => {
+    lastSignal = Date.now();
     void ack("heartbeat");
   });
   source.addEventListener("stop", stop);
   source.addEventListener("play", (e) => play(JSON.parse(e.data)));
   source.onerror = () => {
+    source.close();
     client = "";
     stop();
+    clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(connect, retryDelay);
+    retryDelay = Math.min(15000, retryDelay * 2);
   };
 }
+setInterval(() => {
+  if (client && Date.now() - lastSignal > 8000) connect();
+}, 2000);
 function play(job) {
   stop();
   const el = document.createElement(job.kind === "video" ? "video" : "audio");

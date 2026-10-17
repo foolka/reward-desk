@@ -246,11 +246,11 @@ function twitchFields(r, create = false) {
     is_enabled: r.enabled,
     is_user_input_required: r.input,
     is_max_per_stream_enabled: r.streamLimit > 0,
-    max_per_stream: r.streamLimit || 1,
+    ...(r.streamLimit > 0 ? { max_per_stream: r.streamLimit } : {}),
     is_max_per_user_per_stream_enabled: r.userLimit > 0,
-    max_per_user_per_stream: r.userLimit || 1,
+    ...(r.userLimit > 0 ? { max_per_user_per_stream: r.userLimit } : {}),
     is_global_cooldown_enabled: r.cooldown > 0,
-    global_cooldown_seconds: r.cooldown || 1,
+    ...(r.cooldown > 0 ? { global_cooldown_seconds: r.cooldown } : {}),
     should_redemptions_skip_request_queue: r.skipQueue,
   };
   if (!create) fields.is_paused = r.paused;

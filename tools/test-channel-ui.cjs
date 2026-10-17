@@ -160,7 +160,7 @@ const snapshot = {
     assert.equal(await page.locator("#channel-list tr").count(), 3);
     assert.equal(
       await page
-        .locator(".reward-swatch")
+        .locator("#channel-list .reward-swatch")
         .nth(1)
         .evaluate((e) => getComputedStyle(e).backgroundColor),
       "rgb(172, 71, 123)",

@@ -33,6 +33,12 @@ class Overlay {
       clients: [...this.clients.values()].filter(
         (c) => c.ready && Date.now() - c.seen < 12000,
       ).length,
+      obsClients: [...this.clients.values()].filter(
+        (c) => c.obs && c.ready && Date.now() - c.seen < 12000,
+      ).length,
+      outdated: [...this.clients.values()].some(
+        (c) => c.obs && c.build !== this.build,
+      ),
       error: this.error,
     };
   }
@@ -118,7 +124,14 @@ class Overlay {
         return;
       }
       const id = randomUUID(),
-        c = { id, res, seen: Date.now(), ready: false };
+        c = {
+          id,
+          res,
+          seen: Date.now(),
+          ready: false,
+          obs: /obs-browser|OBS\//i.test(req.headers["user-agent"] || ""),
+          build: "",
+        };
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
         Connection: "keep-alive",
@@ -169,7 +182,14 @@ class Overlay {
         return;
       }
       c.seen = Date.now();
-      c.ready = true;
+      const wasReady = c.ready;
+      c.build = value.build || "";
+      c.ready = !c.obs || c.build === this.build;
+      if (c.ready !== wasReady) {
+        if (c.obs && c.ready)
+          this.store.log("Источник OBS подключён, версия страницы проверена");
+        this.changed();
+      }
       const j = this.engine.playing();
       if (value.id && j?.id === value.id && j.client === c.id) {
         if (value.type === "ended") this.engine.finish(j.id, true);
@@ -249,6 +269,17 @@ class Overlay {
     }
     for (const c of this.clients.values()) {
       if (Date.now() - c.seen > 12000) {
+        c.ready = false;
+        const job = this.engine.playing();
+        if (job?.client === c.id) {
+          this.engine.interrupt(
+            job.id,
+            "Источник OBS не отвечает. Проверьте показ перед повтором.",
+          );
+          this.store.log(
+            "Источник OBS потерял связь во время показа. Автоповтор отключён.",
+          );
+        }
         c.res.end();
         continue;
       }

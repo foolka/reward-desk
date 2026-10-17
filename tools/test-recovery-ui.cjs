@@ -140,7 +140,7 @@ async function launch() {
   }, restoreRoot);
   await page.locator("#recover-profile").click();
   await page.waitForFunction(
-    () => document.querySelector("#reward-count").textContent === "2",
+    async () => (await desk.command("state")).rewards.length === 2,
   );
   snapshot = await page.evaluate(() => desk.command("state"));
   assert.ok(snapshot.rewards.some((r) => r.id === recovered.id));

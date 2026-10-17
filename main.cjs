@@ -19,6 +19,9 @@ const { Overlay } = require("./core/overlay.cjs");
 const { TwitchAuth, safeError } = require("./core/twitch-auth.cjs");
 const { Twitch } = require("./core/twitch.cjs");
 const { ChannelRewards } = require("./core/channel-rewards.cjs");
+const { RewardGroups } = require("./core/groups.cjs");
+const { ObsRecovery } = require("./core/obs-control.cjs");
+const { prepareObs } = require("./core/obs-setup.cjs");
 const { Updates, launchInstaller } = require("./core/updates.cjs");
 const {
   selectProfile,
@@ -53,6 +56,8 @@ let win,
   auth,
   twitch,
   channelRewards,
+  groups,
+  obsRecovery,
   updates,
   pendingUpdate,
   closing = false,
@@ -82,6 +87,7 @@ function snapshot() {
   return {
     version: app.getVersion(),
     rewards: store.rewards(),
+    groups: groups?.list() || [],
     drafts: store.drafts(),
     media: store.all("media"),
     jobs: store
@@ -96,6 +102,7 @@ function snapshot() {
     twitch: twitch.status,
     chat: twitch.chat.view(),
     overlay: overlay.view(),
+    obsRecovery: obsRecovery?.view() || {},
     paused: store.meta("paused", false),
     dataPath: root,
     test,
@@ -147,6 +154,7 @@ app
     });
     twitch = new Twitch({ auth, store, engine, changed });
     channelRewards = new ChannelRewards(twitch);
+    groups = new RewardGroups(store, twitch);
     overlay = new Overlay({
       store,
       engine,
@@ -164,6 +172,24 @@ app
       store.log(overlay.error);
     }
     auth.on("change", changed);
+    let obsConfig = null;
+    if (!test) {
+      try {
+        obsConfig = privateLoad("obs-control.bin");
+      } catch {
+        store.log(
+          "Не удалось прочитать настройки защиты OBS. Настройте подключение повторно; сохранённый файл не изменён.",
+        );
+      }
+    }
+    obsRecovery = new ObsRecovery({
+      overlay,
+      engine,
+      store,
+      changed,
+      config: obsConfig,
+    });
+    if (!test) obsRecovery.start();
     auth.on("authorized", () => {
       if (!test) void twitch.connect();
     });
@@ -351,6 +377,50 @@ async function execute(command, arg) {
     case "channel-list":
       if (test) throw Error("Twitch отключён в тестовом режиме");
       return channelRewards.list();
+    case "group-save": {
+      const result = await groups.save(arg);
+      changed();
+      return result;
+    }
+    case "group-remove":
+      groups.remove(arg);
+      break;
+    case "obs-connect": {
+      if (test)
+        throw Error("Подключение к настоящему OBS отключено в тестовом режиме");
+      let config,
+        prepared = false;
+      if (arg.local) {
+        const file = path.join(
+          app.getPath("appData"),
+          "obs-studio/plugin_config/obs-websocket/config.json",
+        );
+        const result = prepareObs(file, {
+          running: () => {
+            const { execFileSync } = require("node:child_process");
+            const output = execFileSync(
+              "tasklist.exe",
+              ["/FI", "IMAGENAME eq obs64.exe", "/FO", "CSV", "/NH"],
+              { encoding: "utf8", windowsHide: true },
+            );
+            return /^"obs64\.exe"/im.test(output);
+          },
+          backup: (raw) =>
+            privateSave(`obs-before-setup-${Date.now()}.bin`, { file, raw }),
+        });
+        ({ config, prepared } = result);
+      } else config = { port: Number(arg.port), password: arg.password };
+      if (!prepared) await obsRecovery.configure(config);
+      privateSave("obs-control.bin", config);
+      if (prepared) obsRecovery.usePrepared(config);
+      store.setMeta("obsAutoRecover", true);
+      break;
+    }
+    case "obs-auto":
+      if (arg && !obsRecovery.config)
+        throw Error("Сначала подключите OBS WebSocket");
+      store.setMeta("obsAutoRecover", !!arg);
+      break;
     case "channel-save":
       if (test) throw Error("Twitch отключён в тестовом режиме");
       return channelRewards.save(arg);
@@ -596,6 +666,7 @@ app.on("before-quit", (event) => {
   cleanup();
 });
 function cleanup() {
+  obsRecovery?.close();
   twitch?.close();
   auth?.dispose();
   overlay?.close();

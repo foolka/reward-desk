@@ -83,7 +83,7 @@ const errors = [];
   const page = await app.firstWindow();
   page.on("pageerror", (e) => errors.push(e.message));
   await page.locator(".reward-item").first().waitFor();
-  assert.equal(await page.locator(".reward-item").count(), 2);
+  assert.equal(await page.locator(".reward-item").count(), 1);
   await page.locator("[data-tab=channel]").click();
   assert.equal(await page.locator("#channel-refresh").isDisabled(), true);
   assert.match(
@@ -91,6 +91,7 @@ const errors = [];
     /Войдите через Twitch/,
   );
   await page.locator("[data-tab=rewards]").click();
+  await page.locator('#kind-video').click();
   await page.locator(`[data-id="${movie.id}"]`).click();
   await page.locator("#placement").waitFor();
   assert.ok(
@@ -189,6 +190,7 @@ const errors = [];
     path: path.join(screenshots, "video-editor.png"),
     fullPage: true,
   });
+  await page.locator('#kind-audio').click();
   await page.locator(`[data-id="${audio.id}"]`).click();
   await page.evaluate((file) => addFiles([file]), wav);
   assert.equal(await page.locator(".media-row").count(), 2);
