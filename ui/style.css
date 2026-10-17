@@ -360,6 +360,46 @@ label.check {
   padding-top: 22px;
   margin-top: 24px;
 }
+.chat-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px;
+  gap: 10px 14px;
+  margin-top: 12px;
+}
+.caption-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(85px, 1fr) 75px;
+  gap: 10px 14px;
+}
+.caption-fields .wide {
+  grid-column: 1 / -1;
+}
+.duration-options {
+  margin-top: 16px;
+}
+.duration-options > .check {
+  margin-bottom: 12px;
+}
+.chat-fields .wide {
+  grid-column: 1 / -1;
+}
+.chat-fields textarea {
+  min-height: 58px;
+}
+.chat-section .section-head {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+#chat-status {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+#chat-access:not([hidden]) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
 .section-head {
   margin-bottom: 16px;
 }
@@ -545,6 +585,9 @@ button.option-help svg {
   width: 24px;
   height: 24px;
   pointer-events: none;
+}
+.placement:has(.video-caption) > svg {
+  display: none;
 }
 .stage-caption {
   display: flex;

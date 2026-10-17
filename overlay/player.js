@@ -28,7 +28,7 @@ function stop() {
     current.el.pause();
     current.el.removeAttribute("src");
     current.el.load();
-    current.el.remove();
+    current.frame.remove();
     current = null;
   }
 }
@@ -54,7 +54,13 @@ function connect() {
 function play(job) {
   stop();
   const el = document.createElement(job.kind === "video" ? "video" : "audio");
-  current = { id: job.id, el };
+  const frame = job.kind === "video" ? document.createElement("div") : el;
+  if (frame !== el) {
+    frame.className = "clip-frame";
+    el.className = "clip";
+    frame.append(el);
+  }
+  current = { id: job.id, el, frame };
   el.volume = job.volume / 100;
   el.preload = "auto";
   el.playsInline = true;
@@ -63,7 +69,7 @@ function play(job) {
     if (settled || current?.id !== job.id) return;
     settled = true;
     clearTimeout(watchdog);
-    el.classList.add("leaving");
+    frame.classList.add("leaving");
     setTimeout(() => {
       if (current?.id === job.id) {
         stop();
@@ -74,6 +80,7 @@ function play(job) {
   el.onended = () => finish("ended");
   el.onerror = () => finish("error");
   el.onloadedmetadata = () => {
+    if (current?.id !== job.id || settled) return;
     if (!Number.isFinite(el.duration) || el.duration > 600) {
       finish("error");
       return;
@@ -81,8 +88,7 @@ function play(job) {
     if (job.kind === "video") {
       const v = job.video,
         p = RewardGeometry.layout(v, el.videoWidth / el.videoHeight || 16 / 9);
-      el.className = "clip";
-      Object.assign(el.style, {
+      Object.assign(frame.style, {
         left: p.x + "px",
         top: p.y + "px",
         width: p.width + "px",
@@ -91,6 +97,7 @@ function play(job) {
         border: `${p.border}px ${v.borderStyle} ${v.color}`,
         borderRadius: v.radius + "px",
       });
+      RewardCaption.renderAll(frame, v, el.duration);
     }
     clearTimeout(watchdog);
     watchdog = setTimeout(
@@ -101,6 +108,6 @@ function play(job) {
   };
   watchdog = setTimeout(() => finish("error"), 20000);
   el.src = job.url;
-  stage.append(el);
+  stage.append(frame);
 }
 connect();

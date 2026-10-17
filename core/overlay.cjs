@@ -68,7 +68,14 @@ class Overlay {
     const leaf = route.slice(this.base.length);
     if (
       req.method === "GET" &&
-      ["/", "/player.js", "/player.css", "/geometry.js"].includes(leaf)
+      [
+        "/",
+        "/player.js",
+        "/player.css",
+        "/geometry.js",
+        "/caption.js",
+        "/caption.css",
+      ].includes(leaf)
     ) {
       const file = leaf === "/" ? "index.html" : leaf.slice(1);
       res.setHeader(

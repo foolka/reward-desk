@@ -67,6 +67,7 @@ function accept(value) {
   renderStatus();
   renderJobs();
   renderSettings();
+  renderChatStatus();
   channelAccountChanged();
   if (selected && !dirty && !saving) {
     const latest = state.rewards.find((r) => r.id === selected);
@@ -154,13 +155,45 @@ function renderEditor() {
     return;
   }
   const video = draft.kind === "video";
+  const chat = draft.chat || {
+    enabled: false,
+    command: "",
+    users: [],
+    cooldown: 5,
+  };
   $("#editor").innerHTML =
     `<div class="editor-head"><div class="title"><h2>${esc(draft.title)}</h2><small>${draft.remoteId ? "Связана с Twitch" : "Локальный черновик"}${draft.sync === "pending" ? " · изменения не отправлены" : ""}</small></div><div class="button-row"><button id="test-reward">${icon("play")}Тест</button><button id="remove-reward" class="danger" title="Удалить награду">${icon("trash-2")}</button></div></div>
   ${settingsMarkup(draft)}
+  <section class="editor-section chat-section"><div class="section-head"><h3>Запуск через чат</h3><span id="chat-status" class="muted"></span></div>
+  <label class="check"><input id="chat-enabled" type="checkbox" ${chat.enabled ? "checked" : ""}>Разрешить команду чата</label>
+  <div class="chat-fields"><label>Команда<input id="chat-command" maxlength="33" placeholder="!video" value="${esc(chat.command)}" spellcheck="false"></label><label>Пауза, сек.<input id="chat-cooldown" type="number" min="0" max="3600" value="${chat.cooldown}"></label><label class="wide">Разрешённые Twitch-ники<textarea id="chat-users" rows="2" maxlength="5400" placeholder="nickname1, nickname2" spellcheck="false">${esc(Array.isArray(chat.users) ? chat.users.join(", ") : chat.users)}</textarea></label></div>
+  <div id="chat-access" class="notice" hidden><span id="chat-access-text"></span><button id="chat-open-settings">${icon("log-in")}Подключение Twitch</button></div></section>
   <section class="editor-section"><div class="section-head"><h3>${video ? "Видео" : "Звуки"} <span class="muted" id="media-count"></span></h3><span class="muted" id="media-mode"></span></div><div class="roulette-options"><label class="check"><input id="allow-repeats" type="checkbox" ${draft.allowRepeats === true ? "checked" : ""} aria-describedby="roulette-help">Полный рандом с повторениями</label><div id="roulette-help" class="field-note"></div></div><div class="media-head" aria-hidden="true"><span>Файл</span><span>Громкость</span><span>Вес</span><span id="chance-heading"></span><span></span><span></span></div><div id="media-list" class="media-list"></div><div id="drop-zone" class="drop-zone"><button id="add-files">${icon("upload")}Добавить файлы</button><span class="formats">${video ? "MP4 · WebM" : "MP3 · WAV · OGG · M4A · FLAC"}</span></div></section>
   ${video ? `<section class="editor-section"><div class="section-head"><h3>Размещение видео</h3><select id="position-mode" aria-label="Размещение" style="width:190px"><option value="fixed">Фиксированная область</option><option value="random">Случайное место</option></select></div><div class="preview-layout"><div><div id="stage" class="stage"><div id="placement" class="placement">${icon("move")}</div></div><div class="stage-caption"><span>1920 × 1080</span><span id="coordinates"></span></div></div><div class="video-controls">${vnum("width", "Макс. ширина", 40, 1920)}${vnum("height", "Макс. высота", 40, 1080)}${vnum("x", "X", 0, 1920)}${vnum("y", "Y", 0, 1080)}${vnum("border", "Толщина рамки", 0, 40)}<label>Стиль рамки<select id="border-style"><option value="solid">Сплошная</option><option value="dashed">Пунктир</option><option value="dotted">Точки</option><option value="double">Двойная</option><option value="none">Без рамки</option></select></label>${vnum("radius", "Скругление", 0, 200)}<label>Цвет рамки<input type="color" id="border-color" value="${draft.video.color}"></label><label class="check wide"><input type="checkbox" id="tilt" ${draft.video.angle ? "checked" : ""}>Случайный наклон</label><label class="wide">Максимальный угол, ±°<input id="angle" type="range" min="0" max="45" value="${draft.video.angle}"><output id="angle-value">${draft.video.angle}°</output></label></div></div></section>` : ""}
+  ${video ? captionMarkup() : ""}
   <div class="save-footer"><button id="save" class="primary">${icon("save")}Сохранить</button><button id="publish">${icon("cloud-upload")}${draft.remoteId ? "Синхронизировать" : "Создать в Twitch"}</button></div>`;
   bindSettings($("#editor"), () => draft, markDirty);
+  for (const [id, key] of Object.entries({
+    "chat-enabled": "enabled",
+    "chat-command": "command",
+    "chat-users": "users",
+    "chat-cooldown": "cooldown",
+  })) {
+    $("#" + id).addEventListener("input", (event) => {
+      draft.chat ||= { enabled: false, command: "", users: [], cooldown: 5 };
+      const el = event.target;
+      draft.chat[key] =
+        el.type === "checkbox"
+          ? el.checked
+          : el.type === "number"
+            ? Number(el.value)
+            : el.value;
+      markDirty();
+      renderChatStatus();
+    });
+  }
+  act($("#chat-open-settings"), () => $("[data-tab=settings]").click());
+  renderChatStatus();
   $("#allow-repeats").addEventListener("change", (event) => {
     draft.allowRepeats = event.target.checked;
     markDirty();
@@ -204,6 +237,28 @@ function renderEditor() {
   if (video) bindVideo();
   renderMedia();
   icons();
+}
+function renderChatStatus() {
+  if (!$("#chat-status") || !draft) return;
+  const enabled = !!draft.chat?.enabled;
+  $(".chat-fields").hidden = !enabled;
+  $("#chat-status").textContent = enabled
+    ? state.chat?.status || "Чат не подключён"
+    : "Выключено";
+  for (const id of ["chat-command", "chat-users", "chat-cooldown"])
+    $("#" + id).disabled = !enabled;
+  const otherAccount =
+    draft.chatAccount &&
+    (draft.chatAccount !== state.auth.user?.id ||
+      draft.chatClientId !== state.authClientId);
+  $("#chat-access").hidden =
+    !enabled ||
+    (!!state.auth.user && !state.chat?.reauthRequired && !otherAccount);
+  $("#chat-access-text").textContent = otherAccount
+    ? "Команда привязана к другому аккаунту Twitch или Client ID. Войдите в исходный аккаунт."
+    : state.auth.user
+      ? "Для команд нужен повторный вход с разрешением на чтение чата. Награды за баллы продолжают работать."
+      : "Для запуска из чата войдите в аккаунт своего канала.";
 }
 function markDirty() {
   dirty = true;
@@ -293,6 +348,28 @@ function percentages() {
   });
 }
 function bindVideo() {
+  for (const el of $$("[data-caption]"))
+    el.addEventListener("input", () => {
+      draft.video.caption ||= { ...RewardCaption.defaults };
+      draft.video.caption[el.dataset.caption] =
+        el.type === "number" ? Number(el.value) : el.value;
+      markDirty();
+      updatePlacement();
+    });
+  for (const el of $$("[data-duration]"))
+    el.addEventListener("input", () => {
+      draft.video.duration ||= { ...RewardCaption.durationDefaults };
+      draft.video.duration[el.dataset.duration] =
+        el.type === "checkbox"
+          ? el.checked
+          : el.type === "number"
+            ? Number(el.value)
+            : el.value;
+      for (const input of $$("[data-duration]:not([type=checkbox])"))
+        input.disabled = !draft.video.duration.enabled;
+      markDirty();
+      updatePlacement();
+    });
   $("#position-mode").value = draft.video.mode;
   $("#border-style").value = draft.video.borderStyle;
   $$("[data-video]").forEach((el) =>
@@ -394,11 +471,30 @@ function updatePlacement() {
     border: `${frame.border * scale}px ${v.borderStyle} ${v.color}`,
     borderRadius: v.radius * scale + "px",
   });
+  RewardCaption.renderAll(p, draft.video, video?.duration, scale);
   $("#coordinates").textContent =
     `${Math.round(frame.x)}, ${Math.round(frame.y)} · ${Math.round(frame.width)} × ${Math.round(frame.height)}`;
   for (const key of ["x", "y"])
     if (document.activeElement !== $(`[data-video="${key}"]`))
       $(`[data-video="${key}"]`).value = v[key];
+}
+function captionMarkup() {
+  const c = draft.video.caption || RewardCaption.defaults;
+  const d = draft.video.duration || RewardCaption.durationDefaults;
+  return `<section class="editor-section"><div class="section-head"><h3>Текст на видео</h3></div><div class="caption-fields">
+  <label class="wide">Текст<textarea id="caption-text" data-caption="text" maxlength="300" rows="2" placeholder="Без надписи">${esc(c.text)}</textarea></label>
+  <label>Шрифт<select id="caption-font" data-caption="font">${RewardCaption.fonts.map((font) => `<option ${font === c.font ? "selected" : ""}>${esc(font)}</option>`).join("")}</select></label>
+  <label>Размер, px<input id="caption-size" data-caption="size" type="number" min="8" max="200" value="${c.size}"></label>
+  <label>Цвет<input id="caption-color" data-caption="color" type="color" value="${esc(c.color)}"></label>
+  <label>Смещение X<input id="caption-x" data-caption="x" type="number" min="-1920" max="1920" value="${c.x}"></label>
+  <label>Смещение Y<input id="caption-y" data-caption="y" type="number" min="-1080" max="1080" value="${c.y}"></label>
+  </div><div class="duration-options"><label class="check"><input id="duration-enabled" data-duration="enabled" type="checkbox" ${d.enabled ? "checked" : ""}>Показывать длительность видео</label><div class="caption-fields">
+  <label>Шрифт<select id="duration-font" data-duration="font" ${d.enabled ? "" : "disabled"}>${RewardCaption.fonts.map((font) => `<option ${font === d.font ? "selected" : ""}>${esc(font)}</option>`).join("")}</select></label>
+  <label>Размер, px<input id="duration-size" data-duration="size" type="number" min="8" max="200" value="${d.size}" ${d.enabled ? "" : "disabled"}></label>
+  <label>Цвет<input id="duration-color" data-duration="color" type="color" value="${esc(d.color)}" ${d.enabled ? "" : "disabled"}></label>
+  <label>Смещение X<input id="duration-x" data-duration="x" type="number" min="-1920" max="1920" value="${d.x}" ${d.enabled ? "" : "disabled"}></label>
+  <label>Смещение Y<input id="duration-y" data-duration="y" type="number" min="-1080" max="1080" value="${d.y}" ${d.enabled ? "" : "disabled"}></label>
+  </div></div></section>`;
 }
 function renderStatus() {
   $(".version").textContent = "PRIVATE " + state.version;
@@ -432,7 +528,7 @@ function renderJobs() {
   $("#jobs").innerHTML = state.jobs
     .map(
       (j) =>
-        `<tr><td>${new Date(j.createdAt).toLocaleString("ru")}</td><td>${esc(j.user)}<small>${esc(j.rewardTitle)}</small></td><td>${esc(j.item?.name || "")}</td><td><span class="status ${j.state}">${states[j.state] || j.state}</span>${j.detail ? `<small>${esc(j.detail)}</small>` : ""}</td><td><div class="button-row">${j.state === "attention" ? `<button data-retry="${esc(j.id)}" title="Повторить тот же файл">${icon("rotate-ccw")}</button>` : ""}${["attention", "queued"].includes(j.state) ? `<button data-cancel="${esc(j.id)}" title="${j.refundable ? "Отменить и вернуть баллы" : "Отменить"}">${icon("x")}</button>` : ""}</div></td></tr>`,
+        `<tr><td>${new Date(j.createdAt).toLocaleString("ru")}</td><td>${esc(j.user)}<small>${esc(j.rewardTitle)}</small>${j.source === "chat" ? `<small>Чат · ${esc(j.command)}</small>` : ""}</td><td>${esc(j.item?.name || "")}</td><td><span class="status ${j.state}">${states[j.state] || j.state}</span>${j.detail ? `<small>${esc(j.detail)}</small>` : ""}</td><td><div class="button-row">${j.state === "attention" ? `<button data-retry="${esc(j.id)}" title="Повторить тот же файл">${icon("rotate-ccw")}</button>` : ""}${["attention", "queued"].includes(j.state) ? `<button data-cancel="${esc(j.id)}" title="${j.refundable ? "Отменить и вернуть баллы" : "Отменить"}">${icon("x")}</button>` : ""}</div></td></tr>`,
     )
     .join("");
   $$("[data-retry]").forEach((el) =>
@@ -444,6 +540,8 @@ function renderJobs() {
   icons();
 }
 function renderSettings() {
+  $("#chat-connection-state").textContent =
+    state.chat?.status || "Чат не подключён";
   $("#auth-state").textContent =
     state.auth.message ||
     (state.auth.user

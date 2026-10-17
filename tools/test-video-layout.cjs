@@ -200,6 +200,117 @@ let app, browser;
         ),
       reward.id,
     );
+    await page
+      .locator("#caption-text")
+      .fill("Спасибо за поддержку!\nНовый ролик");
+    await page.locator("#caption-font").selectOption("Arial");
+    await page.locator("#caption-size").fill("48");
+    await page.locator("#caption-color").fill("#ffee33");
+    await page.locator("#duration-enabled").check();
+    await page.locator("#duration-font").selectOption("Verdana");
+    await page.locator("#duration-color").fill("#ffffff");
+    await page.locator("#save").click();
+    const captionState = await page.evaluate(() => desk.command("state"));
+    const saved = captionState.rewards.find((r) => r.id === reward.id);
+    assert.equal(
+      saved.video.caption.text,
+      "Спасибо за поддержку!\nНовый ролик",
+    );
+    assert.equal(saved.video.duration.enabled, true);
+    for (const width of [1440, 1040, 760]) {
+      await app.evaluate(
+        ({ BrowserWindow }, w) =>
+          BrowserWindow.getAllWindows()[0].setContentSize(w, 1000),
+        width,
+      );
+      await page.locator("#placement").scrollIntoViewIfNeeded();
+      await page.waitForTimeout(100);
+      const geometry = await page.locator("#placement").evaluate((frame) => {
+        const c = frame.querySelector('[data-kind="caption"]'),
+          d = frame.querySelector('[data-kind="duration"]');
+        return {
+          inside: [c, d].every(
+            (el) =>
+              el.offsetLeft >= 0 &&
+              el.offsetTop >= 0 &&
+              el.offsetLeft + el.offsetWidth <= frame.clientWidth + 1 &&
+              el.offsetTop + el.offsetHeight <= frame.clientHeight + 1,
+          ),
+          separate: d.offsetTop + d.offsetHeight <= c.offsetTop + 1,
+          duration: d.textContent,
+          overflow: document.documentElement.scrollWidth > innerWidth,
+        };
+      });
+      assert.equal(
+        geometry.inside,
+        true,
+        `${reward.title} caption bounds ${width}`,
+      );
+      assert.equal(
+        geometry.separate,
+        true,
+        `${reward.title} caption separation ${width}`,
+      );
+      assert.equal(geometry.duration, "0:03");
+      assert.equal(geometry.overflow, false);
+      await page.screenshot({
+        path: path.join(out, `caption-${reward.title}-${width}.png`),
+      });
+    }
+    const played = await page.evaluate(
+      (id) => desk.command("test", { id }),
+      reward.id,
+    );
+    const playId = played.jobs[0].id;
+    await player.locator('.video-caption[data-kind="caption"]').waitFor();
+    assert.equal(
+      await player.locator('[data-kind="duration"]').textContent(),
+      "0:03",
+    );
+    assert.equal(
+      await player
+        .locator('[data-kind="caption"]')
+        .evaluate((el) => getComputedStyle(el).fontWeight),
+      "800",
+    );
+    const rendered = await player
+      .locator(".clip-frame")
+      .screenshot({ path: path.join(out, `obs-caption-${reward.title}.png`) });
+    const coloredText = await app.evaluate(
+      ({ nativeImage }, data) => {
+        const bytes = nativeImage.createFromDataURL(data).getBitmap();
+        let count = 0;
+        for (let i = 0; i < bytes.length; i += 4)
+          if (bytes[i + 2] > 200 && bytes[i + 1] > 180 && bytes[i] < 110)
+            count++;
+        return count;
+      },
+      "data:image/png;base64," + rendered.toString("base64"),
+    );
+    assert.ok(coloredText > 50, "Caption pixels rendered over video");
+    await page.waitForFunction(
+      async (id) =>
+        (await desk.command("state")).jobs.some(
+          (j) => j.id === id && j.state === "done",
+        ),
+      playId,
+    );
+    // Independent offsets, styles and disabling survive the next save.
+    await page.locator("#caption-text").fill("<b>Текст</b>");
+    await page.locator("#caption-x").fill("-25");
+    await page.locator("#caption-y").fill("-30");
+    await page.locator("#duration-x").fill("25");
+    await page.locator("#duration-y").fill("-150");
+    await page.locator("#save").click();
+    assert.equal(
+      await page.locator('#placement [data-kind="caption"]').textContent(),
+      "<b>Текст</b>",
+    );
+    assert.equal(await page.locator("#placement b").count(), 0);
+    await page.locator("#caption-text").fill("");
+    await page.locator("#duration-enabled").uncheck();
+    await page.locator("#save").click();
+    assert.equal(await page.locator("#placement .video-caption").count(), 0);
   }
   const checkbox = page.locator("#allow-repeats"),
     help = page.locator('.option-help[data-help="repeats"]');
@@ -223,7 +334,7 @@ let app, browser;
       tip.x + tip.width <=
         (await page.evaluate(() => document.documentElement.clientWidth)) &&
       tip.y >= 0 &&
-      tip.y + tip.height <= 850,
+      tip.y + tip.height <= 1000,
   );
   await page.screenshot({ path: path.join(out, "option-help-760.png") });
   await page.keyboard.press("Escape");
@@ -240,6 +351,7 @@ let app, browser;
       obsInnerEdgePixels: true,
       compactRows: true,
       tooltipsMouseAndKeyboard: true,
+      captionsAndDuration: true,
     }),
   );
 })()

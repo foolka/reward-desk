@@ -8,7 +8,9 @@ class Engine {
     this.rng = rng;
   }
   enqueue(reward, event = null, itemId = null) {
-    const id = event ? `${event.account}:${event.id}` : `test:${randomUUID()}`;
+    const id = event
+      ? `${event.source === "chat" ? "chat:" : ""}${event.account}:${event.id}`
+      : `test:${randomUUID()}`;
     const job = this.store.transaction(() =>
       this.createJob(id, reward, event, itemId),
     );
@@ -23,8 +25,8 @@ class Engine {
     const cycleKey =
       "roulette:" +
       JSON.stringify([
-        reward.account || event?.account || "",
-        reward.clientId || "",
+        reward.account || reward.chatAccount || event?.account || "",
+        reward.clientId || reward.chatClientId || "",
         reward.id,
       ]);
     try {
@@ -53,9 +55,12 @@ class Engine {
       rewardId: reward.id,
       rewardTitle: reward.title,
       account: event?.account || "",
-      clientId: reward.clientId,
+      clientId: reward.clientId || reward.chatClientId,
       remoteId: reward.remoteId,
-      redemptionId: event?.id || "",
+      redemptionId: event?.source === "chat" ? "" : event?.id || "",
+      source: event?.source === "chat" ? "chat" : event ? "redemption" : "test",
+      command: event?.source === "chat" ? event.command : "",
+      userId: event?.userId || "",
       user: event?.user || "Тест",
       createdAt: Date.now(),
       state: detail
@@ -64,7 +69,8 @@ class Engine {
           : "failed"
         : "queued",
       desired: detail ? "CANCELED" : "",
-      refundable: !!event && event.status === "unfulfilled",
+      refundable:
+        !!event && event.source !== "chat" && event.status === "unfulfilled",
       detail,
       item: selected ? { ...selected, ...this.store.media(selected.id) } : null,
       video: { ...reward.video },

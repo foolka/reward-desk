@@ -158,7 +158,7 @@ const errors = [];
     assert.ok(
       await page.locator("#editor select").evaluateAll(
         (selects) =>
-          selects.length === 2 &&
+          selects.length === 4 &&
           selects.every((select) => {
             const wrapper = select.parentElement,
               arrow = wrapper.querySelector("svg"),

@@ -1,5 +1,6 @@
 const { EventEmitter } = require("node:events");
 const SCOPES = ["channel:manage:redemptions"];
+const LOGIN_SCOPES = [...SCOPES, "user:read:chat"];
 let sdkPromise;
 function loadSdk() {
   return (sdkPromise ||= Promise.all([
@@ -182,7 +183,7 @@ class TwitchAuth extends EventEmitter {
     this.message = "Получаем код Twitch";
     this.emit("change");
     const sdk = await this.sdk();
-    const info = await sdk.startDeviceCodeFlow(id, SCOPES);
+    const info = await sdk.startDeviceCodeFlow(id, LOGIN_SCOPES);
     if (generation !== this.serial) return;
     const pending = {
       ...info,
@@ -190,6 +191,7 @@ class TwitchAuth extends EventEmitter {
       url: verificationUrl(info.verificationUri),
       expiresAt: this.now() + info.expiresIn * 1000,
       interval: Math.max(5, info.interval || 5) * 1000,
+      scopes: LOGIN_SCOPES,
     };
     try {
       this.savePending(pending);
@@ -226,7 +228,7 @@ class TwitchAuth extends EventEmitter {
       const token = await sdk.exchangeDeviceCode(
         pending.clientId,
         pending.deviceCode,
-        SCOPES,
+        pending.scopes || SCOPES,
       );
       if (generation !== this.serial) return;
       const info = await sdk.getTokenInfo(token.accessToken, pending.clientId);
@@ -234,7 +236,7 @@ class TwitchAuth extends EventEmitter {
       if (
         info.clientId !== pending.clientId ||
         !info.userId ||
-        SCOPES.some((scope) => !info.scopes.includes(scope))
+        (pending.scopes || SCOPES).some((scope) => !info.scopes.includes(scope))
       )
         throw publicError("Разрешены не все нужные права. Повторите вход.");
       const saved = {
@@ -383,6 +385,16 @@ class TwitchAuth extends EventEmitter {
       throw publicError(this.message);
     }
     this.validatedAt = this.now();
+    // Keep optional permissions current without invalidating legacy reward-only logins.
+    if (
+      JSON.stringify(this.saved.token.scope) !== JSON.stringify(info.scopes)
+    ) {
+      this.saved = {
+        ...this.saved,
+        token: { ...this.saved.token, scope: info.scopes },
+      };
+      this.persist(this.saved);
+    }
     this.health = "ready";
     this.message = "";
     this.emit("change");
@@ -428,6 +440,7 @@ class TwitchAuth extends EventEmitter {
 module.exports = {
   TwitchAuth,
   SCOPES,
+  LOGIN_SCOPES,
   clientId,
   loadSdk,
   errorCode,

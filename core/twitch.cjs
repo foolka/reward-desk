@@ -1,7 +1,16 @@
 const { loadSdk } = require("./twitch-auth.cjs");
+const { ChatCommands } = require("./chat-commands.cjs");
 class Twitch {
-  constructor({ auth, store, engine, changed = () => {}, fetchImpl = fetch }) {
-    Object.assign(this, { auth, store, engine, changed, fetchImpl });
+  constructor({
+    auth,
+    store,
+    engine,
+    changed = () => {},
+    fetchImpl = fetch,
+    sdk = loadSdk,
+  }) {
+    Object.assign(this, { auth, store, engine, changed, fetchImpl, sdk });
+    this.chat = new ChatCommands({ auth, store, engine });
     this.status = "Войдите через Twitch";
     this.epoch = 0;
     this.onRetry = () => this.reconnect();
@@ -204,7 +213,7 @@ class Twitch {
     this.status = "Подключение";
     this.changed();
     try {
-      const sdk = await loadSdk(),
+      const sdk = await this.sdk(),
         authProvider = await this.auth.getProvider();
       if (epoch !== this.epoch) return;
       const listener = (this.listener = new sdk.EventSubWsListener({
@@ -212,6 +221,32 @@ class Twitch {
         logger: { minLevel: "error" },
       }));
       const account = this.account();
+      if (this.chat.hasScope()) {
+        this.chat.status = "Подключение к чату";
+        this.chatSub = listener.onChannelChatMessage(
+          account,
+          account,
+          (event) => {
+            if (epoch !== this.epoch) return;
+            try {
+              this.chat.receive({
+                account: event.broadcasterId,
+                sourceAccount: event.sourceBroadcasterId,
+                id: event.messageId,
+                login: event.chatterName,
+                user: event.chatterDisplayName,
+                userId: event.chatterId,
+                text: event.messageText,
+                isRedemption: event.isRedemption,
+              });
+            } catch {
+              this.store.log(
+                "Не удалось обработать команду чата; проверьте очередь и доступ к папке данных",
+              );
+            }
+          },
+        );
+      }
       listener.onChannelRedemptionAdd(account, (event) => {
         if (epoch === this.epoch)
           this.receive({
@@ -226,23 +261,60 @@ class Twitch {
         if (epoch === this.epoch)
           this.engine.external(account, event.id, event.status);
       });
-      listener.onSubscriptionCreateSuccess(() => {
+      listener.onSubscriptionCreateSuccess((sub) => {
         if (epoch === this.epoch) {
-          this.status = "Twitch подключён";
+          if (sub === this.chatSub) {
+            this.chat.ready = true;
+            this.chat.status = "Команды чата подключены";
+            clearTimeout(this.chatRetry);
+          } else this.status = "Twitch подключён";
           this.changed();
         }
       });
-      listener.onSubscriptionCreateFailure(() =>
-        this.reconnect("Не удалось подписаться на Twitch"),
-      );
+      listener.onSubscriptionCreateFailure((sub, error) => {
+        if (epoch !== this.epoch) return;
+        if (sub !== this.chatSub)
+          return this.reconnect("Не удалось подписаться на Twitch");
+        this.chat.ready = false;
+        const denied =
+          [401, 403].includes(error?.statusCode) ||
+          error?.name === "MissingScopeError";
+        this.chat.status = denied
+          ? "Нет доступа к чату. Войдите через Twitch ещё раз"
+          : "Чат недоступен; повторяем подключение";
+        clearTimeout(this.chatRetry);
+        if (!denied) {
+          this.chatRetry = setTimeout(() => {
+            if (epoch === this.epoch) sub.start();
+          }, 30000);
+          this.chatRetry.unref();
+        }
+        this.changed();
+      });
+      listener.onUserSocketConnect(() => {
+        if (epoch === this.epoch && this.chatSub?.verified) {
+          this.chat.ready = true;
+          this.chat.status = "Команды чата подключены";
+          this.changed();
+        }
+      });
       listener.onUserSocketDisconnect(() => {
         if (epoch === this.epoch) {
           this.status = "Переподключение Twitch";
+          this.chat.ready = false;
+          this.chat.status = "Переподключение чата";
           this.changed();
         }
       });
-      listener.onRevoke((_sub, reason) => {
+      listener.onRevoke((sub, reason) => {
         if (epoch === this.epoch) {
+          if (sub === this.chatSub) {
+            this.chat.ready = false;
+            this.chat.status =
+              "Доступ к чату отозван. Войдите через Twitch ещё раз";
+            this.changed();
+            return;
+          }
           this.auth.invalidate("Twitch отозвал доступ: " + reason);
           this.stop();
         }
@@ -359,8 +431,12 @@ class Twitch {
     this.epoch++;
     clearTimeout(this.retry);
     clearInterval(this.timer);
+    clearTimeout(this.chatRetry);
+    this.chat.ready = false;
+    this.chat.status = "Чат не подключён";
     this.listener?.stop();
     this.listener = null;
+    this.chatSub = null;
   }
   close() {
     this.closed = true;

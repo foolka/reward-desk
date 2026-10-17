@@ -9,6 +9,7 @@
     />
     <title>Reward Desk</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="../overlay/caption.css" />
   </head>
   <body>
     <header class="app-header">
@@ -294,6 +295,7 @@
           <div>
             <h2>Twitch</h2>
             <div id="auth-state"></div>
+            <div id="chat-connection-state" class="field-note"></div>
             <label
               >Client ID<input
                 id="client-id"
@@ -358,6 +360,7 @@
     <div id="toast" role="status" hidden></div>
     <script src="../node_modules/lucide/dist/umd/lucide.js"></script>
     <script src="../overlay/geometry.js"></script>
+    <script src="../overlay/caption.js"></script>
     <script src="help.js"></script>
     <script src="app.js"></script>
     <script src="channel.js"></script>

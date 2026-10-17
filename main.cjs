@@ -13,7 +13,7 @@ const {
 const fs = require("node:fs");
 const path = require("node:path");
 const { Store, importMedia } = require("./core/store.cjs");
-const { initialReward, integer } = require("./core/model.cjs");
+const { initialReward, integer, twitchFields } = require("./core/model.cjs");
 const { Engine } = require("./core/engine.cjs");
 const { Overlay } = require("./core/overlay.cjs");
 const { TwitchAuth, safeError } = require("./core/twitch-auth.cjs");
@@ -67,6 +67,7 @@ function snapshot() {
     authClientId: auth.saved?.clientId || "",
     clientId: store.meta("clientId", require("./twitch-client.json").clientId),
     twitch: twitch.status,
+    chat: twitch.chat.view(),
     overlay: overlay.view(),
     paused: store.meta("paused", false),
     dataPath: root,
@@ -219,8 +220,14 @@ async function execute(command, arg) {
       const prior = store.reward(arg.id);
       if (prior?.sync === "creating")
         throw Error("Сначала восстановите связь с Twitch кнопкой создания");
-      const r = store.saveReward(arg);
-      if (r.remoteId) {
+      if (prior?.remoteId && !test) twitch.assertOwner(prior);
+      const r = twitch.chat.saveReward(arg);
+      if (
+        r.remoteId &&
+        (r.sync === "pending" ||
+          JSON.stringify(twitchFields(prior)) !==
+            JSON.stringify(twitchFields(r)))
+      ) {
         store.putReward({ ...r, sync: "pending" });
         if (!test) await twitch.publish(r.id);
       }

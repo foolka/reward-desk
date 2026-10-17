@@ -1,4 +1,9 @@
 const { randomInt, randomUUID } = require("node:crypto");
+const {
+  fonts: captionFonts,
+  defaults: captionDefaults,
+  durationDefaults,
+} = require("../overlay/caption.js");
 function number(value, min, max, label) {
   const n = Number(value);
   if (!Number.isFinite(n) || n < min || n > max)
@@ -39,6 +44,9 @@ function initialReward(kind = "audio") {
     cooldown: 0,
     skipQueue: false,
     allowRepeats: false,
+    chat: { enabled: false, command: "", users: [], cooldown: 5 },
+    chatAccount: "",
+    chatClientId: "",
     items: [],
     video: {
       mode: "fixed",
@@ -51,6 +59,8 @@ function initialReward(kind = "audio") {
       color: "#ffffff",
       radius: 16,
       angle: 0,
+      caption: { ...captionDefaults },
+      duration: { ...durationDefaults },
     },
     remoteId: "",
     account: "",
@@ -104,6 +114,7 @@ function normalizeReward(input, prior) {
   r.allowRepeats = input.allowRepeats ?? prior?.allowRepeats ?? false;
   if (typeof r.allowRepeats !== "boolean")
     throw Error("Неверный режим рулетки");
+  r.chat = normalizeChat(input.chat ?? prior?.chat ?? r.chat);
   if (
     !["fixed", "random"].includes(v.mode) ||
     !["solid", "dashed", "dotted", "double", "none"].includes(v.borderStyle)
@@ -120,6 +131,12 @@ function normalizeReward(input, prior) {
     angle: number(v.angle, 0, 45, "Наклон"),
     color: color(v.color),
     borderStyle: v.borderStyle,
+    caption: normalizeCaption(
+      v.caption ?? prior?.video?.caption ?? captionDefaults,
+    ),
+    duration: normalizeDuration(
+      v.duration ?? prior?.video?.duration ?? durationDefaults,
+    ),
   };
   r.video.x = Math.min(r.video.x, 1920 - r.video.width);
   r.video.y = Math.min(r.video.y, 1080 - r.video.height);
@@ -144,9 +161,65 @@ function normalizeReward(input, prior) {
       "clientId",
       "sync",
       "createdAt",
+      "chatAccount",
+      "chatClientId",
     ])
       r[key] = prior[key];
   return r;
+}
+function normalizeCaption(value) {
+  if (!value || !captionFonts.includes(value.font))
+    throw Error("Выберите шрифт надписи");
+  return {
+    text: text(value.text, 300, "Текст на видео"),
+    x: number(value.x, -1920, 1920, "Смещение текста X"),
+    y: number(value.y, -1080, 1080, "Смещение текста Y"),
+    size: number(value.size, 8, 200, "Размер текста"),
+    color: color(value.color),
+    font: value.font,
+  };
+}
+function normalizeDuration(value) {
+  if (!value || typeof value.enabled !== "boolean")
+    throw Error("Неверный переключатель длительности видео");
+  const { text: unused, ...style } = normalizeCaption({ ...value, text: "" });
+  return { enabled: value.enabled, ...style };
+}
+function normalizeChat(value) {
+  if (!value || typeof value.enabled !== "boolean")
+    throw Error("Неверный переключатель команды чата");
+  const command = text(value.command || "", 33, "Команда").toLowerCase();
+  if (command && !/^![\p{L}\p{N}_-]{1,32}$/u.test(command))
+    throw Error(
+      "Команда: ! и до 32 букв, цифр, дефисов или подчёркиваний, без пробелов",
+    );
+  const source =
+    typeof value.users === "string"
+      ? value.users.split(/[\s,;]+/).filter(Boolean)
+      : value.users;
+  if (!Array.isArray(source) || source.length > 200)
+    throw Error("Укажите не больше 200 разрешённых ников");
+  const users = [
+    ...new Set(
+      source.map((login) => {
+        if (typeof login !== "string") throw Error("Неверный Twitch-ник");
+        const result = login.trim().replace(/^@/, "").toLowerCase();
+        if (!/^[a-z0-9_]{1,25}$/.test(result))
+          throw Error(
+            "Нужен Twitch-логин латиницей, без ссылки: " + login.slice(0, 40),
+          );
+        return result;
+      }),
+    ),
+  ];
+  if (value.enabled && (!command || !users.length))
+    throw Error("Для команды укажите её текст и хотя бы один разрешённый ник");
+  return {
+    enabled: value.enabled,
+    command,
+    users,
+    cooldown: integer(value.cooldown ?? 5, 0, 3600, "Пауза между командами"),
+  };
 }
 function twitchFields(r, create = false) {
   const fields = {
@@ -195,6 +268,9 @@ function chooseCycle(items, previous = {}, rng = randomInt) {
 module.exports = {
   initialReward,
   normalizeReward,
+  normalizeChat,
+  normalizeCaption,
+  normalizeDuration,
   normalizeSettings,
   fromTwitch,
   twitchFields,
