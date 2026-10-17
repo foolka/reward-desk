@@ -9,7 +9,24 @@ const esc = (s) =>
       ],
   );
 const icon = (name) => `<i data-lucide="${name}"></i>`;
-const icons = () => lucide.createIcons();
+const icons = () => {
+  $$("select:not([multiple]):not([size])").forEach((select) => {
+    if (select.parentElement.classList.contains("select-control")) return;
+    const wrapper = document.createElement("span");
+    wrapper.className = "select-control";
+    if (select.style.width) {
+      wrapper.style.width = select.style.width;
+      select.style.width = "100%";
+    }
+    select.before(wrapper);
+    wrapper.append(select);
+    wrapper.insertAdjacentHTML(
+      "beforeend",
+      '<i data-lucide="chevron-down" aria-hidden="true"></i>',
+    );
+  });
+  lucide.createIcons();
+};
 let state,
   selected = "",
   draft,

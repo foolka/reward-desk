@@ -93,6 +93,20 @@ const errors = [];
   await page.locator("[data-tab=rewards]").click();
   await page.locator(`[data-id="${movie.id}"]`).click();
   await page.locator("#placement").waitFor();
+  assert.ok(
+    await page.locator("#position-mode").evaluate((select) => {
+      const style = getComputedStyle(select),
+        context = document.createElement("canvas").getContext("2d");
+      context.font = style.font;
+      return (
+        context.measureText(select.selectedOptions[0].textContent).width <=
+        select.clientWidth -
+          parseFloat(style.paddingLeft) -
+          parseFloat(style.paddingRight)
+      );
+    }),
+    "Selected placement label fits beside its chevron",
+  );
   await page.locator("[data-field=title]").fill("Видео-сюрприз: новый");
   await page.locator("#save").click();
   await page.waitForFunction(
@@ -140,6 +154,26 @@ const errors = [];
       ),
       false,
       `Overflow at ${w}`,
+    );
+    assert.ok(
+      await page.locator("#editor select").evaluateAll(
+        (selects) =>
+          selects.length === 2 &&
+          selects.every((select) => {
+            const wrapper = select.parentElement,
+              arrow = wrapper.querySelector("svg"),
+              bounds = select.getBoundingClientRect(),
+              icon = arrow?.getBoundingClientRect();
+            return (
+              wrapper.className === "select-control" &&
+              !wrapper.parentElement.classList.contains("select-control") &&
+              getComputedStyle(select).appearance === "none" &&
+              icon &&
+              bounds.right - icon.right >= 10
+            );
+          }),
+      ),
+      `All dynamic select chevrons inset at ${w}`,
     );
     await page.screenshot({
       path: path.join(out, `editor-${w}.png`),

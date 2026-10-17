@@ -4,7 +4,51 @@ let channelCatalog = null,
   channelDirty = false,
   channelBusy = false,
   channelIdentity = "",
-  channelError = "";
+  channelError = "",
+  channelColors = new Set(),
+  channelSort = { key: "", direction: 1 };
+const channelCollator = new Intl.Collator("ru", {
+  numeric: true,
+  sensitivity: "base",
+});
+function rewardColor(r) {
+  const color = r.settings.background;
+  return /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : "#777777";
+}
+function rewardStatus(r) {
+  return !r.settings.enabled
+    ? "disabled"
+    : r.settings.paused
+      ? "paused"
+      : r.inStock === false
+        ? "unavailable"
+        : "active";
+}
+function clearChannelFilters(column) {
+  if (!column || column === "color") channelColors.clear();
+  if (!column || column === "title") {
+    $("#channel-search").value = "";
+    $("#channel-name").value = "";
+    $("#channel-status").value = "all";
+  }
+  if (!column || column === "cost") {
+    $("#channel-cost-min").value = "";
+    $("#channel-cost-max").value = "";
+  }
+  if (!column) $("#channel-filter").value = "all";
+}
+function positionChannelPopover(popover) {
+  if (!popover.matches(":popover-open")) return;
+  const button = document.querySelector(`[popovertarget="${popover.id}"]`);
+  const anchor = button.getBoundingClientRect();
+  const rect = popover.getBoundingClientRect();
+  popover.style.left = `${Math.max(12, Math.min(anchor.left, innerWidth - rect.width - 12))}px`;
+  const top =
+    anchor.bottom + 6 + rect.height <= innerHeight - 12
+      ? anchor.bottom + 6
+      : anchor.top - rect.height - 6;
+  popover.style.top = `${Math.max(12, Math.min(top, innerHeight - rect.height - 12))}px`;
+}
 function channelAccountChanged() {
   const identity = `${state.auth.user?.id || ""}:${state.authClientId || ""}`;
   if (identity === channelIdentity) return;
@@ -14,21 +58,108 @@ function channelAccountChanged() {
   channelDraft = null;
   channelDirty = false;
   channelError = "";
+  clearChannelFilters();
+  channelSort = { key: "", direction: 1 };
+  $$(".column-popover:popover-open").forEach((el) => el.hidePopover());
   renderChannel();
   renderChannelEditor();
 }
 function renderChannel() {
-  const term = $("#channel-search").value.toLocaleLowerCase();
+  const term = $("#channel-search").value.trim().toLocaleLowerCase();
   const filter = $("#channel-filter").value;
+  const status = $("#channel-status").value;
+  const minInput = $("#channel-cost-min"),
+    maxInput = $("#channel-cost-max");
+  const min = minInput.value === "" ? 0 : minInput.valueAsNumber;
+  const max = maxInput.value === "" ? Infinity : maxInput.valueAsNumber;
+  const validRange =
+    minInput.validity.valid && maxInput.validity.valid && min <= max;
+  const active = {
+    color: channelColors.size > 0,
+    title: !!term || status !== "all",
+    cost: minInput.value !== "" || maxInput.value !== "" || !validRange,
+  };
   const items = (channelCatalog?.items || []).filter(
     (r) =>
+      validRange &&
       r.settings.title.toLocaleLowerCase().includes(term) &&
-      (filter === "all" || r.manageable === (filter === "editable")),
+      (filter === "all" || r.manageable === (filter === "editable")) &&
+      (!channelColors.size || channelColors.has(rewardColor(r))) &&
+      (status === "all" || rewardStatus(r) === status) &&
+      r.settings.cost >= min &&
+      r.settings.cost <= max,
+  );
+  if (channelSort.key)
+    items.sort((a, b) => {
+      const order =
+        channelSort.key === "cost"
+          ? a.settings.cost - b.settings.cost
+          : channelCollator.compare(
+              channelSort.key === "color" ? rewardColor(a) : a.settings.title,
+              channelSort.key === "color" ? rewardColor(b) : b.settings.title,
+            );
+      return order * channelSort.direction;
+    });
+  $("#channel-range-error").hidden = validRange;
+  minInput.setAttribute("aria-invalid", String(!validRange));
+  maxInput.setAttribute("aria-invalid", String(!validRange));
+  $("#channel-filter-summary").hidden =
+    !Object.values(active).some(Boolean) && filter === "all";
+  $("#channel-filter-count").textContent =
+    `${items.length} из ${channelCatalog?.items.length || 0} наград`;
+  $$("[data-channel-menu]").forEach((button) => {
+    button.classList.toggle("active", active[button.dataset.channelMenu]);
+    button.setAttribute(
+      "aria-label",
+      `${button.title}${active[button.dataset.channelMenu] ? ": включён" : ""}`,
+    );
+  });
+  $$("[data-channel-sort]").forEach((button) => {
+    const sorted = channelSort.key === button.dataset.channelSort;
+    const direction = sorted
+      ? channelSort.direction > 0
+        ? "ascending"
+        : "descending"
+      : "none";
+    button.closest("th").setAttribute("aria-sort", direction);
+    button.classList.toggle("active", sorted);
+    button.querySelector("svg, i")?.remove();
+    button.insertAdjacentHTML(
+      "beforeend",
+      icon(
+        !sorted
+          ? "arrow-up-down"
+          : channelSort.direction > 0
+            ? "arrow-up"
+            : "arrow-down",
+      ),
+    );
+  });
+  const colors = [
+    ...new Set([
+      ...(channelCatalog?.items || []).map(rewardColor),
+      ...channelColors,
+    ]),
+  ].sort();
+  if ($("#channel-colors").dataset.colors !== colors.join(",")) {
+    $("#channel-colors").dataset.colors = colors.join(",");
+    $("#channel-colors").innerHTML = colors
+      .map(
+        (color) =>
+          `<button data-filter-color="${color}" style="background:${color}" title="${color.toUpperCase()}" aria-label="Цвет ${color.toUpperCase()}" aria-pressed="false"></button>`,
+      )
+      .join("");
+  }
+  $$("[data-filter-color]").forEach((button) =>
+    button.setAttribute(
+      "aria-pressed",
+      String(channelColors.has(button.dataset.filterColor)),
+    ),
   );
   $("#channel-list").innerHTML = items
     .map(
       (r) => `<tr class="${r.id === channelSelected ? "selected" : ""}">
-    <td><span class="reward-swatch" style="background:${/^#[0-9a-f]{6}$/i.test(r.settings.background) ? r.settings.background : "#777777"}" title="${esc(r.settings.background)}"></span></td>
+    <td><span class="reward-swatch" style="background:${rewardColor(r)}" title="${esc(r.settings.background)}"></span></td>
     <td><strong>${esc(r.settings.title)}</strong><small>${!r.settings.enabled ? "Отключена" : r.settings.paused ? "На паузе" : r.inStock === false ? "Недоступна сейчас" : "Активна"} · ${r.manageable ? "Reward Desk" : "Только просмотр"}</small></td>
     <td class="reward-cost">${Number(r.settings.cost).toLocaleString("ru")}</td>
     <td><button data-channel-id="${esc(r.id)}" title="${r.manageable ? "Редактировать" : "Просмотреть"} ${esc(r.settings.title)}" ${channelBusy ? "disabled" : ""}>${icon(r.manageable ? "pencil" : "eye")}</button></td></tr>`,
@@ -57,6 +188,7 @@ function renderChannel() {
   $("#channel-error").hidden = !channelError;
   $("#channel-error").textContent = channelError;
   icons();
+  $$(".column-popover:popover-open").forEach(positionChannelPopover);
 }
 function selectChannel(id) {
   if (channelBusy) return;
@@ -162,7 +294,62 @@ async function saveChannel() {
     renderChannelEditor();
   }
 }
-$("#channel-search").addEventListener("input", renderChannel);
+$("#channel-search").addEventListener("input", () => {
+  $("#channel-name").value = $("#channel-search").value;
+  renderChannel();
+});
+$("#channel-name").addEventListener("input", () => {
+  $("#channel-search").value = $("#channel-name").value;
+  renderChannel();
+});
 $("#channel-filter").addEventListener("change", renderChannel);
+$("#channel-status").addEventListener("change", renderChannel);
+["#channel-cost-min", "#channel-cost-max"].forEach((selector) =>
+  $(selector).addEventListener("input", renderChannel),
+);
+$("#channel-colors").addEventListener("click", (event) => {
+  const color = event.target.closest("[data-filter-color]")?.dataset
+    .filterColor;
+  if (!color) return;
+  if (channelColors.has(color)) channelColors.delete(color);
+  else channelColors.add(color);
+  renderChannel();
+});
+$$("[data-channel-sort]").forEach((button) =>
+  act(button, () => {
+    const key = button.dataset.channelSort;
+    channelSort =
+      channelSort.key !== key
+        ? { key, direction: 1 }
+        : channelSort.direction === 1
+          ? { key, direction: -1 }
+          : { key: "", direction: 1 };
+    renderChannel();
+  }),
+);
+$$("[data-clear-column]").forEach((button) =>
+  act(button, () => {
+    clearChannelFilters(button.dataset.clearColumn);
+    renderChannel();
+  }),
+);
+act($("#channel-clear-filters"), () => {
+  clearChannelFilters();
+  renderChannel();
+});
+$$(".column-popover").forEach((popover) =>
+  popover.addEventListener("toggle", () => {
+    const button = document.querySelector(`[popovertarget="${popover.id}"]`);
+    button.setAttribute(
+      "aria-expanded",
+      String(popover.matches(":popover-open")),
+    );
+    positionChannelPopover(popover);
+  }),
+);
+const repositionChannelFilters = () =>
+  $$(".column-popover:popover-open").forEach(positionChannelPopover);
+window.addEventListener("resize", repositionChannelFilters);
+document.addEventListener("scroll", repositionChannelFilters, true);
 act($("#channel-refresh"), loadChannel);
 act($("#channel-dashboard"), () => command("channel-dashboard"));

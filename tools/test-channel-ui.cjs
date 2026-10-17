@@ -55,7 +55,7 @@ const catalog = {
   ],
 };
 const snapshot = {
-  version: "0.2.0",
+  version: require("../package.json").version,
   rewards: [local],
   media: [],
   jobs: [],
@@ -164,6 +164,86 @@ const snapshot = {
         .evaluate((e) => getComputedStyle(e).backgroundColor),
       "rgb(172, 71, 123)",
     );
+    const rowIds = () =>
+      page
+        .locator("#channel-list [data-channel-id]")
+        .evaluateAll((buttons) =>
+          buttons.map((button) => button.dataset.channelId),
+        );
+    for (const [key, ascending] of [
+      ["cost", ["extra", "ours", "old"]],
+      ["title", ["ours", "old", "extra"]],
+      ["color", ["extra", "old", "ours"]],
+    ]) {
+      await page.locator(`[data-channel-sort=${key}]`).click();
+      assert.deepEqual(await rowIds(), ascending);
+      assert.equal(
+        await page.locator(`[data-column=${key}]`).getAttribute("aria-sort"),
+        "ascending",
+      );
+      await page.locator(`[data-channel-sort=${key}]`).click();
+      assert.deepEqual(await rowIds(), [...ascending].reverse());
+      await page.locator(`[data-channel-sort=${key}]`).click();
+      assert.deepEqual(await rowIds(), ["ours", "old", "extra"]);
+    }
+    await page.locator("[data-channel-menu=color]").click();
+    await page.locator('[data-filter-color="#f59c35"]').click();
+    assert.deepEqual(await rowIds(), ["ours"]);
+    await page.locator('[data-filter-color="#259b88"]').click();
+    assert.deepEqual(await rowIds(), ["ours", "extra"]);
+    await page.keyboard.press("Escape");
+    await page.locator("[data-channel-menu=cost]").click();
+    await page.locator("#channel-cost-min").fill("750");
+    await page.locator("#channel-cost-max").fill("750");
+    assert.deepEqual(
+      await rowIds(),
+      ["ours"],
+      "Inclusive bounds combine with color filters",
+    );
+    await page.locator("#channel-cost-min").fill("751");
+    assert.deepEqual(await rowIds(), []);
+    assert.equal(await page.locator("#channel-range-error").isVisible(), true);
+    await page.locator("#channel-cost-min").fill("0");
+    assert.equal(
+      await page.locator("#channel-cost-min").getAttribute("aria-invalid"),
+      "true",
+    );
+    await page.locator("[data-clear-column=cost]").click();
+    assert.deepEqual(await rowIds(), ["ours", "extra"]);
+    await page.keyboard.press("Escape");
+    await page.locator("[data-channel-menu=title]").click();
+    await page.locator("#channel-status").selectOption("paused");
+    assert.deepEqual(await rowIds(), ["extra"]);
+    await page.locator("#channel-name").fill("  РУЛЕТКА  ");
+    assert.deepEqual(await rowIds(), ["extra"]);
+    assert.equal(
+      await page.locator("#channel-search").inputValue(),
+      "  РУЛЕТКА  ",
+    );
+    await page.keyboard.press("Escape");
+    await page.locator("#channel-clear-filters").click();
+    assert.deepEqual(await rowIds(), ["ours", "old", "extra"]);
+    assert.equal(
+      await page.locator("#channel-filter-summary").isVisible(),
+      false,
+    );
+    assert.equal(await page.locator("#channel-name").inputValue(), "");
+    // Filters and sorting are local UI state, never reward mutations.
+    assert.equal(await page.evaluate(() => mock.saves.length), 0);
+    for (const status of ["active", "paused", "disabled", "unavailable"]) {
+      await page.locator("[data-channel-menu=title]").click();
+      await page.locator("#channel-status").selectOption(status);
+      assert.deepEqual(
+        await rowIds(),
+        status === "active"
+          ? ["ours", "old"]
+          : status === "paused"
+            ? ["extra"]
+            : [],
+      );
+      await page.keyboard.press("Escape");
+    }
+    await page.locator("#channel-clear-filters").click();
     await page.locator("[data-channel-id=old]").click();
     assert.equal(
       await page.locator("#channel-form [data-field=cost]").inputValue(),
@@ -200,6 +280,14 @@ const snapshot = {
     assert.equal(saved.settings.cooldown, 45);
     assert.equal(saved.settings.input, true);
     await page.locator("#channel-form [data-field=cost]").fill("999");
+    await page.locator("[data-channel-sort=cost]").click();
+    await page.locator("#channel-search").fill("рулетка");
+    await page.evaluate(() => emitState(structuredClone(mock.snapshot)));
+    assert.equal(
+      await page.locator("#channel-form [data-field=cost]").inputValue(),
+      "999",
+    );
+    await page.locator("#channel-clear-filters").click();
     await page.evaluate(() => (mock.fail = true));
     await page.locator("#channel-save").click();
     await page.locator("#toast").filter({ hasText: "уже изменены" }).waitFor();
@@ -221,7 +309,7 @@ const snapshot = {
     await page.locator("#channel-refresh").click();
     await page.waitForFunction(() => !channelDirty && !channelBusy);
     await page.locator("#toast").waitFor({ state: "hidden" });
-    for (const width of [1440, 1040, 760]) {
+    for (const width of [1440, 1240, 1120, 1040, 760]) {
       await page.setViewportSize({ width, height: 1080 });
       assert.equal(
         await page.evaluate(
@@ -230,11 +318,78 @@ const snapshot = {
         false,
         `Overflow at ${width}`,
       );
+      const layout = await page.evaluate(() => {
+        const buttons = [
+          ...document.querySelectorAll(".column-heading button"),
+        ];
+        return buttons.every((button) => {
+          const rect = button.getBoundingClientRect(),
+            cell = button.closest("th").getBoundingClientRect();
+          return rect.left >= cell.left && rect.right <= cell.right + 1;
+        });
+      });
+      assert.ok(layout, `Column header overflow at ${width}`);
       await page.screenshot({
         path: path.join(root, "test-results", `channel-${width}.png`),
         fullPage: true,
       });
+      for (const column of ["color", "title", "cost"]) {
+        await page.locator(`[data-channel-menu=${column}]`).click();
+        const popup = page.locator(`#channel-${column}-popover`);
+        await page.waitForFunction(
+          (id) =>
+            document.getElementById(id).matches(":popover-open") &&
+            document.getElementById(id).style.left !== "",
+          `channel-${column}-popover`,
+        );
+        const rect = await popup.boundingBox();
+        assert.ok(
+          rect.x >= 0 &&
+            rect.x + rect.width <= width &&
+            rect.y >= 0 &&
+            rect.y + rect.height <= 1080,
+          `Popover overflow: ${column} at ${width}`,
+        );
+        if (width === 1240 || width === 760)
+          await page.screenshot({
+            path: path.join(
+              root,
+              "test-results",
+              `filter-${column}-${width}.png`,
+            ),
+          });
+        await page.keyboard.press("Escape");
+        assert.equal(await popup.isVisible(), false);
+      }
+      assert.equal(
+        await page.locator("#channel-filter").evaluate((select) => {
+          const wrapper = select.parentElement,
+            arrow = wrapper.querySelector("svg"),
+            bounds = select.getBoundingClientRect(),
+            icon = arrow.getBoundingClientRect();
+          return (
+            wrapper.className === "select-control" &&
+            getComputedStyle(select).appearance === "none" &&
+            bounds.right - icon.right >= 10 &&
+            getComputedStyle(arrow).pointerEvents === "none"
+          );
+        }),
+        true,
+      );
     }
+    await page.setViewportSize({ width: 760, height: 560 });
+    await page.locator("[data-channel-menu=cost]").click();
+    await page.locator("#channel-cost-min").fill("900");
+    await page.locator("#channel-cost-max").fill("800");
+    const shortPopup = await page
+      .locator("#channel-cost-popover")
+      .boundingBox();
+    assert.ok(
+      shortPopup.y >= 0 && shortPopup.y + shortPopup.height <= 560,
+      "Validation error fits in a short window",
+    );
+    await page.locator("[data-clear-column=cost]").click();
+    await page.keyboard.press("Escape");
     await page.setViewportSize({ width: 1440, height: 1080 });
     await page.screenshot({
       path: path.join(root, "docs/screenshots/channel-rewards.png"),
@@ -262,7 +417,10 @@ const snapshot = {
         settingsSaved: true,
         dirtyStatePreserved: true,
         accountCleared: true,
-        responsiveWidths: [1440, 1040, 760],
+        columnFilters: true,
+        columnSorting: true,
+        selectChevronSpacing: true,
+        responsiveWidths: [1440, 1240, 1120, 1040, 760],
       }),
     );
   } finally {
