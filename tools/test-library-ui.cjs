@@ -106,6 +106,24 @@ let app;
         ),
       );
     assert.ok(fits, "Sidebar overflow " + width);
+    const stripes = await page.locator(".reward-item").evaluateAll((items) =>
+      items.map((item) => {
+        const row = item.getBoundingClientRect();
+        const stripe = item
+          .querySelector(".reward-swatch")
+          .getBoundingClientRect();
+        return (
+          Math.abs(stripe.top - row.top) < 1 &&
+          Math.abs(stripe.bottom - row.bottom) < 1 &&
+          Math.abs(stripe.left - row.left) < 1 &&
+          stripe.width === 6
+        );
+      }),
+    );
+    assert.ok(
+      stripes.length && stripes.every(Boolean),
+      "Full-height reward colors " + width,
+    );
     await page.screenshot({ path: path.join(out, `library-${width}.png`) });
   }
   await page.locator("#kind-video").click();
@@ -128,6 +146,7 @@ let app;
       disabledLimitsZero: true,
       groupsPreserveDrafts: true,
       groupColors: true,
+      fullHeightColors: true,
       responsive: true,
       oneButtonObsSetup: true,
     }),
