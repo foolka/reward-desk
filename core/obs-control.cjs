@@ -23,6 +23,7 @@ class ObsSocket {
           return;
         }
         const { op, d } = msg;
+        if (!d || typeof d !== "object") return;
         if (op === 0) {
           const identity = { rpcVersion: 1, eventSubscriptions: 0 };
           if (d.authentication)
@@ -70,12 +71,16 @@ class ObsSocket {
         reject(Error("OBS не ответил: " + type));
       }, 5000);
       this.pending.set(id, { resolve, reject, timer });
-      this.ws.send(
+      try { this.ws.send(
         JSON.stringify({
           op: 6,
           d: { requestType: type, requestId: id, requestData: data },
         }),
-      );
+      ); } catch (error) {
+        clearTimeout(timer);
+        this.pending.delete(id);
+        reject(error);
+      }
     });
   }
   rejectPending() {
@@ -120,7 +125,7 @@ class ObsRecovery {
       configured: !!this.config,
       enabled: this.store.meta("obsAutoRecover", false),
       connected: !!this.socket?.ready,
-      status: this.status,
+      status: this.store.meta("obsAutoRecover", false) ? this.status : "Защита выключена",
       lastRecovery: this.lastRecovery,
     };
   }
@@ -180,7 +185,10 @@ class ObsRecovery {
   }
   async tick() {
     if (this.busy || this.closed || this.configuring) return;
-    if (!this.config || !this.store.meta("obsAutoRecover", false)) return;
+    if (!this.config || !this.store.meta("obsAutoRecover", false)) {
+      this.socket?.close();this.socket=null;this.missingSince=null;
+      return;
+    }
     this.busy = true;
     try {
       if (!this.socket?.ready) {
@@ -189,8 +197,11 @@ class ObsRecovery {
         await this.socket.connect();
       }
       if (this.closed) return;
-      if (this.overlay.view().obsClients > 0) {
+      const health = this.overlay.view();
+      if (health.error) {this.status=health.error;this.missingSince=null;return;}
+      if (health.obsClients > 0) {
         this.missingSince = null;
+        this.attempts = [];
         this.status = "Источник OBS отвечает";
         return;
       }
@@ -222,6 +233,9 @@ class ObsRecovery {
         });
         if (!state.videoActive) continue;
         active++;
+        // Recheck ownership after the async activity query before refreshing anything.
+        const current = await this.socket.request("GetInputSettings", {inputName:input.inputName});
+        if (current.inputSettings.url !== this.overlay.url()) continue;
         if (
           this.closed ||
           this.engine.playing() ||

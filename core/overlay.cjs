@@ -129,7 +129,7 @@ class Overlay {
           res,
           seen: Date.now(),
           ready: false,
-          obs: /obs-browser|OBS\//i.test(req.headers["user-agent"] || ""),
+          obs: /obs-browser|OBS(?:Studio)?\//i.test(req.headers["user-agent"] || ""),
           build: "",
         };
       res.writeHead(200, {

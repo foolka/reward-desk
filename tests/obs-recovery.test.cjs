@@ -10,7 +10,7 @@ function fixture() {
     healthy = 0,
     playing = false,
     enabled = true,
-    active = true;
+    active = true, changedUrl = false, afterActivity = false, localError = '';
   const requests = [],
     logs = [];
   const socket = {
@@ -27,12 +27,13 @@ function fixture() {
         return {
           inputSettings: {
             url:
-              data.inputName === "ours"
+              data.inputName === "ours" && !(changedUrl && afterActivity)
                 ? "http://127.0.0.1:18874/o/secret/"
                 : "https://other.test",
           },
         };
       if (type === "GetSourceActive") {
+        afterActivity = true;
         assert.equal(data.sourceName, "ours");
         return { videoActive: active };
       }
@@ -43,7 +44,7 @@ function fixture() {
   const recovery = new ObsRecovery({
     config: { port: 4455, password: "secret" },
     overlay: {
-      view: () => ({ obsClients: healthy }),
+      view: () => ({ obsClients: healthy, error: localError }),
       url: () => "http://127.0.0.1:18874/o/secret/",
     },
     engine: { playing: () => playing },
@@ -60,6 +61,8 @@ function fixture() {
     setPlaying: (n) => (playing = n),
     setEnabled: (n) => (enabled = n),
     setActive: (n) => (active = n),
+    changeUrl: () => (changedUrl = true),
+    setError: (text) => (localError = text),
   };
 }
 test("missing active OBS source is refreshed only after grace, exact URL, with bounded retries", async () => {
@@ -137,4 +140,23 @@ test("one-button setup preserves existing OBS fields, backs up, and refuses chan
       .prepared,
     false,
   );
+  assert.equal(prepareObs(file,{running:()=>false,backup:()=>assert.fail()}).prepared,true);
+});
+
+test('refresh rechecks URL and never touches a reassigned or locally unavailable source',async()=>{
+  for(const mode of ['changed','local-error']){
+    const f=fixture();await f.recovery.tick();f.advance(21000);
+    if(mode==='changed')f.changeUrl();else f.setError('Port unavailable');
+    await f.recovery.tick();
+    assert.equal(f.requests.some(r=>r.type==='PressInputPropertiesButton'),false);
+  }
+});
+test('successful recovery resets the retry budget; disabling closes the connection',async()=>{
+  const f=fixture();await f.recovery.tick();f.advance(21000);await f.recovery.tick();
+  assert.equal(f.recovery.attempts.length,1);
+  f.setHealthy(1);await f.recovery.tick();assert.equal(f.recovery.attempts.length,0);
+  f.setHealthy(0);await f.recovery.tick();f.advance(21000);await f.recovery.tick();
+  assert.equal(f.requests.filter(r=>r.type==='PressInputPropertiesButton').length,2);
+  f.setEnabled(false);await f.recovery.tick();assert.equal(f.recovery.socket,null);
+  assert.equal(f.recovery.view().status,'Защита выключена');
 });

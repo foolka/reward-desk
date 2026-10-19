@@ -19,7 +19,7 @@ function prepareObs(file, { running, backup, io = fs }) {
         port,
         password: current.auth_required ? current.server_password || "" : "",
       },
-      prepared: false,
+      prepared: !running(),
     };
   if (running())
     throw Error(
