@@ -8,6 +8,7 @@ const { createRequire } = require("node:module");
 const main = path.resolve(__dirname, "../main.cjs");
 const realRequire = createRequire(main);
 const source = fs.readFileSync(main, "utf8");
+const product = require("../core/product.cjs");
 
 for (const mode of ["app", "obs-argument", "obs-marker"]) {
   for (const failure of ["redirect", "access"]) {
@@ -32,7 +33,7 @@ for (const mode of ["app", "obs-argument", "obs-marker"]) {
         app: {
           getPath(name) { return name === "appData" ? root : profile; },
           setPath(name, value) { profile = value; },
-          setAppUserModelId() {},
+          setAppUserModelId(value) { assert.equal(value, product.appUserModelId); },
           requestSingleInstanceLock() { return true; },
           getLocale() { return "en-US"; },
           whenReady() { return Promise.resolve(); },
@@ -67,7 +68,8 @@ for (const mode of ["app", "obs-argument", "obs-marker"]) {
       assert.deepEqual(events, ["notice", "exit"]);
       assert.equal(probe, undefined);
       assert.equal(notice.type, failure === "redirect" ? "info" : "error");
-      assert.equal(notice.title, mode === "app" ? "Reward Desk" : "Reward Desk OBS");
+      assert.equal(notice.title, product.name);
+      assert.equal(profile, path.join(root, product.profileName), "arguments and legacy markers cannot select the other product profile");
       assert.equal(notice.message, failure === "redirect" ? "Open from your usual shortcut" : "Could not start the app");
     });
   }

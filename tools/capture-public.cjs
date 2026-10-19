@@ -19,7 +19,7 @@ const video = seed.saveReward({ ...initialReward('video'), title: 'Video break',
 seed.close();
 let app, browser;
 (async () => {
-  for (const mode of ['app', 'obs']) {
+  for (const mode of [require('../core/product.cjs').obsPlugin ? 'obs' : 'app']) {
     const env = { ...process.env, REWARD_DESK_TEST_DATA: profile }; delete env.ELECTRON_RUN_AS_NODE;
     app = await electron.launch({ args: [root, '--test-mode', '--mute-audio', ...(mode === 'obs' ? ['--obs-plugin'] : [])], env });
     let page = await app.firstWindow();

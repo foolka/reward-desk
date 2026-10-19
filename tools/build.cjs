@@ -2,7 +2,7 @@ const { packager } = require("@electron/packager");
 const fs = require("node:fs"),
   path = require("node:path");
 (async () => {
-  const obs = process.argv.includes("--obs-plugin");
+  const obs = require("../core/product.cjs").obsPlugin;
   const root = path.resolve(__dirname, ".."),
     out = path.join(root, "release");
   const [built] = await packager({
@@ -41,7 +41,6 @@ const fs = require("node:fs"),
       ProductName: obs ? "Reward Desk OBS" : "Reward Desk",
     },
   });
-  if (obs) fs.writeFileSync(path.join(built, "resources/reward-desk-obs.json"), JSON.stringify({ mode: "obs-plugin", version: require("../package.json").version }));
   for (const name of [
     "README.md",
     "LICENSE",

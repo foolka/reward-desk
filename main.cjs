@@ -40,9 +40,8 @@ const {
 const { readRecovery, restoreMissing } = require("./core/profile-recovery.cjs");
 const { startupNotice } = require("./core/startup-notice.cjs");
 const test = process.argv.includes("--test-mode");
-const obsPlugin = process.argv.includes("--obs-plugin") ||
-  fs.existsSync(path.join(process.resourcesPath, "reward-desk-obs.json"));
-const profileName = obsPlugin ? "RewardDeskOBS" : "RewardDesk";
+const product = require("./core/product.cjs");
+const { obsPlugin, profileName } = product;
 const obsParent = Number(process.argv[process.argv.indexOf("--obs-parent") + 1]);
 let profileError;
 try {
@@ -58,7 +57,7 @@ try {
 } catch (error) {
   profileError = error;
 }
-app.setAppUserModelId(obsPlugin ? "com.fermionaplay.rewarddeskobs" : "com.fermionaplay.rewarddesk");
+app.setAppUserModelId(product.appUserModelId);
 const primary = profileError ? true : app.requestSingleInstanceLock();
 if (!primary) app.quit();
 let win,
@@ -173,7 +172,7 @@ app
       executable: process.execPath,
       store,
     });
-    updates = new Updates({ current: app.getVersion(), changed, kind: obsPlugin ? "obs" : "app" });
+    updates = new Updates({ current: app.getVersion(), changed });
     const { backup } = require("node:sqlite");
     const backups = path.join(root, "backups");
     fs.mkdirSync(backups, { recursive: true });
@@ -196,7 +195,7 @@ app
     });
     const port = test
       ? Number(process.env.REWARD_DESK_TEST_PORT || 0)
-      : store.meta("port", obsPlugin ? 18875 : 18874);
+      : store.meta("port", product.port);
     overlay.port = port;
     try {
       await overlay.start(port);

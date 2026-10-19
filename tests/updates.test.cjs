@@ -13,7 +13,8 @@ const {
 } = require("../core/updates.cjs");
 const payload = Buffer.from("synthetic installer; never executed");
 const hash = createHash("sha256").update(payload).digest("hex");
-const name = "reward-desk-0.6.0-windows-x64-setup.exe";
+const product = require("../core/product.cjs");
+const name = `${product.id}-0.6.0-windows-x64-setup.exe`;
 const release = {
   tag_name: "v0.6.0",
   draft: false,
@@ -24,7 +25,7 @@ const release = {
     state: "uploaded",
     size: payload.length,
     browser_download_url:
-      "https://github.com/foolka/reward-desk/releases/download/v0.6.0/" + name,
+      `https://github.com/${product.repository}/releases/download/v0.6.0/` + name,
   })),
 };
 
@@ -37,6 +38,7 @@ test("default updater requests release JSON with GitHub JSON Accept header", asy
   const u = new Updates({ current: "0.5.2" });
   assert.equal((await u.check()).status, "unavailable");
   assert.equal(requested.options.headers.Accept, "application/vnd.github+json");
+  assert.equal(requested.url, `https://api.github.com/repos/${product.repository}/releases?per_page=100`);
 });
 test("strict semantic version checks reject downgrade and malformed versions", () => {
   assert.equal(newer("0.10.0", "0.9.9"), true);
@@ -47,20 +49,19 @@ test("strict semantic version checks reject downgrade and malformed versions", (
   assert.throws(() => releaseInfo({ ...release, prerelease: true }, "0.5.0"));
 });
 
-test("OBS updates are isolated from app releases and require plugin assets", async () => {
-  const obs = structuredClone(release);
-  obs.tag_name = "obs-v0.9.0";
-  obs.assets = ["reward-desk-obs-0.9.0-windows-x64-setup.exe", "reward-desk-obs-0.9.0-windows-x64-setup.exe.sha256"].map((name) => ({
-    name, state: "uploaded", size: 100,
-    browser_download_url: "https://github.com/foolka/reward-desk/releases/download/obs-v0.9.0/" + name,
-  }));
-  assert.throws(() => releaseInfo(release, "0.1.0", "obs"));
-  assert.throws(() => releaseInfo(obs, "0.1.0"));
-  const u = new Updates({ current: "0.8.0", kind: "obs", get: async () => new Response(JSON.stringify([release, obs])) });
-  assert.equal((await u.check()).release.name, "reward-desk-obs-0.9.0-windows-x64-setup.exe");
-  const app = new Updates({ current: "0.5.0", get: async () => new Response(JSON.stringify([obs, release, { ...release, tag_name: "v9.0.0", prerelease: true }])) });
-  assert.equal((await app.check()).release.name, name);
-  u.get = async () => new Response(JSON.stringify([release]));
+test("updates accept only this product repository and assets, never the legacy mixed channel", async () => {
+  const other = product.obsPlugin ? "reward-desk" : "reward-desk-obs";
+  const wrongRepo = structuredClone(release);
+  wrongRepo.assets.forEach(asset => { asset.browser_download_url = asset.browser_download_url.replace(product.repository, "foolka/" + other); });
+  assert.throws(() => releaseInfo(wrongRepo, "0.1.0"));
+  const wrongAsset = structuredClone(release);
+  wrongAsset.assets.forEach(asset => { asset.name = asset.name.replace(product.id + "-", other + "-"); });
+  assert.throws(() => releaseInfo(wrongAsset, "0.1.0"));
+  const legacy = { ...release, tag_name: "obs-v0.9.0" };
+  assert.throws(() => releaseInfo(legacy, "0.1.0"));
+  const u = new Updates({ current: "0.5.0", get: async () => new Response(JSON.stringify([legacy, release, { ...release, tag_name: "v9.0.0", prerelease: true }])) });
+  assert.equal((await u.check()).release.name, name);
+  u.get = async () => new Response(JSON.stringify([legacy]));
   assert.equal((await u.check()).status, "unavailable");
 });
 test("only exact repository assets and trusted HTTPS redirects accepted", () => {

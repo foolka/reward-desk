@@ -3,7 +3,8 @@ const path = require("node:path");
 const { createHash, randomUUID } = require("node:crypto");
 const { spawn } = require("node:child_process");
 const { setTimeout: delay } = require("node:timers/promises");
-const REPO = "foolka/reward-desk";
+const product = require("./product.cjs");
+const REPO = product.repository;
 function version(value) {
   const match = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(
     value || "",
@@ -24,14 +25,14 @@ function assetUrl(value, tag, name) {
   if (value !== expected) throw Error("Недопустимый адрес обновления");
   return value;
 }
-function releaseInfo(release, current, kind = "app") {
+function releaseInfo(release, current) {
   if (release.draft || release.prerelease)
     throw Error("Нет стабильного выпуска");
-  if (!(kind === "obs" ? /^obs-v\d+\.\d+\.\d+$/ : /^v\d+\.\d+\.\d+$/).test(release.tag_name))
+  if (!/^v\d+\.\d+\.\d+$/.test(release.tag_name))
     throw Error("Выпуск предназначен для другого варианта Reward Desk");
-  const next = version(kind === "obs" ? release.tag_name.slice(4) : release.tag_name).join(".");
+  const next = version(release.tag_name).join(".");
   if (!newer(next, current)) return null;
-  const name = `reward-desk-${kind === "obs" ? "obs-" : ""}${next}-windows-x64-setup.exe`;
+  const name = `${product.id}-${next}-windows-x64-setup.exe`;
   const installer = release.assets?.find(
     (a) => a.name === name && a.state === "uploaded",
   );
@@ -126,11 +127,10 @@ function checksumText(text, name) {
   return match[1].toLowerCase();
 }
 class Updates {
-  constructor({ current, changed = () => {}, get = request, kind = "app" }) {
+  constructor({ current, changed = () => {}, get = request }) {
     this.current = current;
     this.changed = changed;
     this.get = get;
-    this.kind = kind;
     this.state = { status: "idle", message: "Проверка ещё не выполнена" };
   }
   set(value) {
@@ -155,12 +155,12 @@ class Updates {
       } else {
         const releases = JSON.parse(await smallResponse(response, 2 * 1024 * 1024));
         if (!Array.isArray(releases)) throw Error("Некорректный список выпусков GitHub");
-        const tagPattern = this.kind === "obs" ? /^obs-v\d+\.\d+\.\d+$/ : /^v\d+\.\d+\.\d+$/;
-        const number = (r) => this.kind === "obs" ? r.tag_name.slice(4) : r.tag_name;
+        const tagPattern = /^v\d+\.\d+\.\d+$/;
+        const number = (r) => r.tag_name;
         const release = releases.filter((r) => !r.draft && !r.prerelease && tagPattern.test(r.tag_name))
           .sort((a, b) => newer(number(a), number(b)) ? -1 : newer(number(b), number(a)) ? 1 : 0)[0];
         if (!release) { this.set({ status: "unavailable", message: "Нет доступного публичного выпуска. Приватные выпуски требуют отдельного доступа." }); return this.state; }
-        const info = releaseInfo(release, this.current, this.kind);
+        const info = releaseInfo(release, this.current);
         this.set(
           info
             ? {
