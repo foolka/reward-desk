@@ -1,7 +1,7 @@
 {
   "name": "reward-desk",
   "productName": "Reward Desk",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "description": "Direct Twitch sound and video rewards for OBS",
   "author": "FermionaPlay",
@@ -23,7 +23,11 @@
     "test:appearance-ui": "node tools/test-appearance-ui.cjs",
     "test:update-helper": "node tools/test-update-helper.cjs",
     "build": "node tools/build.cjs",
-    "installer": "node tools/build-installer.cjs"
+    "installer": "node tools/build-installer.cjs",
+    "build:obs": "node tools/build-obs.cjs",
+    "package:obs": "node tools/build.cjs --obs-plugin",
+    "installer:obs": "node tools/build-obs-installer.cjs",
+    "test:obs": "node tools/test-obs-editor.cjs"
   },
   "dependencies": {
     "@twurple/api": "8.2.0",

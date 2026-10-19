@@ -2,12 +2,13 @@ const { packager } = require("@electron/packager");
 const fs = require("node:fs"),
   path = require("node:path");
 (async () => {
+  const obs = process.argv.includes("--obs-plugin");
   const root = path.resolve(__dirname, ".."),
     out = path.join(root, "release");
   const [built] = await packager({
     dir: root,
-    name: "RewardDesk",
-    executableName: "RewardDesk",
+    name: obs ? "RewardDeskOBS" : "RewardDesk",
+    executableName: obs ? "RewardDeskOBS" : "RewardDesk",
     platform: "win32",
     arch: "x64",
     out,
@@ -36,10 +37,11 @@ const fs = require("node:fs"),
     appVersion: require("../package.json").version,
     win32metadata: {
       CompanyName: "FermionaPlay",
-      FileDescription: "Reward Desk",
-      ProductName: "Reward Desk",
+      FileDescription: obs ? "Reward Desk OBS runtime" : "Reward Desk",
+      ProductName: obs ? "Reward Desk OBS" : "Reward Desk",
     },
   });
+  if (obs) fs.writeFileSync(path.join(built, "resources/reward-desk-obs.json"), JSON.stringify({ mode: "obs-plugin", version: require("../package.json").version }));
   for (const name of [
     "README.md",
     "LICENSE",

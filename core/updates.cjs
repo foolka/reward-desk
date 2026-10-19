@@ -24,12 +24,13 @@ function assetUrl(value, tag, name) {
   if (value !== expected) throw Error("Недопустимый адрес обновления");
   return value;
 }
-function releaseInfo(release, current) {
+function releaseInfo(release, current, kind = "app") {
   if (release.draft || release.prerelease)
     throw Error("Нет стабильного выпуска");
-  const next = version(release.tag_name).join(".");
+  if (kind === "obs" && !/^obs-v/.test(release.tag_name)) throw Error("Это не выпуск OBS-плагина");
+  const next = version(kind === "obs" ? release.tag_name.slice(4) : release.tag_name).join(".");
   if (!newer(next, current)) return null;
-  const name = `reward-desk-${next}-windows-x64-setup.exe`;
+  const name = `reward-desk-${kind === "obs" ? "obs-" : ""}${next}-windows-x64-setup.exe`;
   const installer = release.assets?.find(
     (a) => a.name === name && a.state === "uploaded",
   );
@@ -124,10 +125,11 @@ function checksumText(text, name) {
   return match[1].toLowerCase();
 }
 class Updates {
-  constructor({ current, changed = () => {}, get = request }) {
+  constructor({ current, changed = () => {}, get = request, kind = "app" }) {
     this.current = current;
     this.changed = changed;
     this.get = get;
+    this.kind = kind;
     this.state = { status: "idle", message: "Проверка ещё не выполнена" };
   }
   set(value) {
@@ -140,7 +142,7 @@ class Updates {
     this.set({ status: "checking", message: "Проверяем GitHub…" });
     try {
       const response = await this.get(
-        `https://api.github.com/repos/${REPO}/releases/latest`,
+        `https://api.github.com/repos/${REPO}/releases${this.kind === "obs" ? "?per_page=100" : "/latest"}`,
       );
       if (response.status === 404) {
         await response.body?.cancel();
@@ -150,10 +152,11 @@ class Updates {
             "Нет доступного публичного выпуска. Приватные выпуски требуют отдельного доступа.",
         });
       } else {
-        const info = releaseInfo(
-          JSON.parse(await smallResponse(response, 2 * 1024 * 1024)),
-          this.current,
-        );
+        let release = JSON.parse(await smallResponse(response, 2 * 1024 * 1024));
+        if (this.kind === "obs") release = release.filter((r) => !r.draft && !r.prerelease && /^obs-v\d+\.\d+\.\d+$/.test(r.tag_name))
+          .sort((a, b) => newer(a.tag_name.slice(4), b.tag_name.slice(4)) ? -1 : newer(b.tag_name.slice(4), a.tag_name.slice(4)) ? 1 : 0)[0];
+        if (!release) { this.set({ status: "unavailable", message: "Выпуск OBS-плагина пока недоступен" }); return this.state; }
+        const info = releaseInfo(release, this.current, this.kind);
         this.set(
           info
             ? {

@@ -22,6 +22,7 @@ const tr = (source, values) => nativeI18n.t(source, values);
 const { initialReward, integer, twitchFields } = require("./core/model.cjs");
 const { Engine } = require("./core/engine.cjs");
 const { Overlay } = require("./core/overlay.cjs");
+const { Control } = require("./core/control.cjs");
 const { TwitchAuth, safeError } = require("./core/twitch-auth.cjs");
 const { Twitch } = require("./core/twitch.cjs");
 const { ChannelRewards } = require("./core/channel-rewards.cjs");
@@ -38,12 +39,17 @@ const {
 } = require("./core/profile.cjs");
 const { readRecovery, restoreMissing } = require("./core/profile-recovery.cjs");
 const test = process.argv.includes("--test-mode");
+const obsPlugin = process.argv.includes("--obs-plugin") ||
+  fs.existsSync(path.join(process.resourcesPath, "reward-desk-obs.json"));
+const profileName = obsPlugin ? "RewardDeskOBS" : "RewardDesk";
+const obsParent = Number(process.argv[process.argv.indexOf("--obs-parent") + 1]);
 let profileError;
 try {
+  if (test) selectProfile(path.join(app.getPath("appData"), obsPlugin ? "RewardDesk" : "RewardDeskOBS"), true, process.env.REWARD_DESK_TEST_DATA);
   app.setPath(
     "userData",
     selectProfile(
-      path.join(app.getPath("appData"), "RewardDesk"),
+      path.join(app.getPath("appData"), profileName),
       test,
       process.env.REWARD_DESK_TEST_DATA,
     ),
@@ -51,7 +57,7 @@ try {
 } catch (error) {
   profileError = error;
 }
-app.setAppUserModelId("com.fermionaplay.rewarddesk");
+app.setAppUserModelId(obsPlugin ? "com.fermionaplay.rewarddeskobs" : "com.fermionaplay.rewarddesk");
 const primary = profileError ? true : app.requestSingleInstanceLock();
 if (!primary) app.quit();
 let win,
@@ -65,6 +71,7 @@ let win,
   groups,
   obsRecovery,
   updates,
+  control,
   pendingUpdate,
   closing = false,
   flushing = false,
@@ -113,18 +120,22 @@ function snapshot() {
     paused: store.meta("paused", false),
     dataPath: root,
     test,
+    obsPlugin,
     updates: {
       ...updates?.state,
       enabled: store.meta("checkUpdates", true),
-      installable: app.isPackaged && !test,
+      installable: app.isPackaged && !test && !obsPlugin,
     },
   };
 }
 function changed() {
-  if (win && !win.isDestroyed() && !closing)
+  if (!obsPlugin && win && !win.isDestroyed() && !closing)
     win.webContents.send("state", snapshot());
 }
 function show() {
+  if (obsPlugin && control) { void control.openEditor(control.editorUrl()); return; }
+  try { control?.assertDesktop(); }
+  catch (e) { dialog.showErrorBox("Reward Desk", e.message); return; }
   win.show();
   if (win.isMinimized()) win.restore();
   win.focus();
@@ -142,8 +153,8 @@ function applyPreferences() {
     ]));
   return value;
 }
-app.on("second-instance", () => {
-  if (win) show();
+app.on("second-instance", (_, argv) => {
+  if (win && !argv.includes("--obs-plugin")) show();
 });
 app
   .whenReady()
@@ -161,7 +172,7 @@ app
       executable: process.execPath,
       store,
     });
-    updates = new Updates({ current: app.getVersion(), changed });
+    updates = new Updates({ current: app.getVersion(), changed, kind: obsPlugin ? "obs" : "app" });
     const { backup } = require("node:sqlite");
     const backups = path.join(root, "backups");
     fs.mkdirSync(backups, { recursive: true });
@@ -184,7 +195,7 @@ app
     });
     const port = test
       ? Number(process.env.REWARD_DESK_TEST_PORT || 0)
-      : store.meta("port", 18874);
+      : store.meta("port", obsPlugin ? 18875 : 18874);
     overlay.port = port;
     try {
       await overlay.start(port);
@@ -220,11 +231,12 @@ app
     });
     const icon = path.join(__dirname, "assets/icon.png");
     win = new BrowserWindow({
+      show: !obsPlugin,
       width: 1240,
       height: 860,
       minWidth: 760,
       minHeight: 560,
-      title: "Reward Desk",
+      title: obsPlugin ? "Reward Desk OBS" : "Reward Desk",
       frame: false,
       backgroundColor: preferences(store).theme === "dark" ? "#191c1c" : "#f5f7f7",
       icon: fs.existsSync(icon) ? icon : undefined,
@@ -243,7 +255,7 @@ app
       tray = new Tray(
         nativeImage.createFromPath(icon).resize({ width: 24, height: 24 }),
       );
-      tray.setToolTip("Reward Desk");
+      tray.setToolTip(obsPlugin ? "Reward Desk OBS" : "Reward Desk");
       applyPreferences();
       tray.on("double-click", show);
     }
@@ -266,6 +278,8 @@ app
       )
         throw Error("Недопустимый источник команды");
       if (command === "state") return snapshot();
+      if (!["pause", "stop", "check-updates", "minimize", "tray", "quit"].includes(command))
+        control?.assertDesktop();
       const pending = serial.then(() => execute(command, arg));
       serial = pending.catch(() => {});
       return pending;
@@ -278,13 +292,49 @@ app
           event.senderFrame !== win.webContents.mainFrame
         )
           throw Error("Недопустимый источник");
+        control?.assertDesktop();
         store.stashDraft(value);
         event.returnValue = { ok: true };
       } catch (error) {
         event.returnValue = { error: error.message };
       }
     });
-    await win.loadFile(path.join(__dirname, "ui/index.html"));
+    await win.loadFile(path.join(__dirname, obsPlugin ? "ui/service.html" : "ui/index.html"));
+    if (obsPlugin) control = new Control({
+      root, snapshot,
+      desktopVisible: () => win.isVisible(),
+      execute: (command, arg, context) => {
+        const next = serial.then(() => execute(command, arg, context));
+        serial = next.catch(() => {});
+        return next;
+      },
+      stash: (value) => store.stashDraft(value),
+      upload: async (id, file) => {
+        const next = serial.then(() => {
+          const reward = store.reward(id);
+          if (!reward) throw Error("Награда не найдена");
+          const media = importMedia(store, file, reward.kind);
+          changed();
+          return media;
+        });
+        serial = next.catch(() => {});
+        return next;
+      },
+      openEditor: async (url) => {
+        if (!control.editorActive()) {
+          await win.webContents.executeJavaScript("window.releaseEditor()");
+          win.hide();
+        }
+        if (!test) await shell.openExternal(url);
+      },
+    });
+    if (control) await control.start();
+    if (obsPlugin && Number.isSafeInteger(obsParent) && obsParent > 0) {
+      setInterval(() => {
+        try { process.kill(obsParent, 0); }
+        catch (e) { if (e.code === "ESRCH") app.quit(); }
+      }, 5000).unref();
+    }
     if (!test) {
       auth.resume();
       void twitch.connect();
@@ -302,7 +352,7 @@ app
     );
     app.exit(1);
   });
-async function execute(command, arg) {
+async function execute(command, arg, context = {}) {
   if (pendingUpdate && command !== "state")
     throw Error("Приложение готовится к обновлению");
   switch (command) {
@@ -350,6 +400,7 @@ async function execute(command, arg) {
       store.setMeta("checkUpdates", !!arg);
       break;
     case "install-update": {
+      if (obsPlugin) throw Error("Обновление плагина устанавливается отдельным установщиком после закрытия OBS.");
       if (test || !app.isPackaged)
         throw Error("Обновление доступно только в установленной программе");
       const busy = () =>
@@ -496,7 +547,7 @@ async function execute(command, arg) {
     case "remove": {
       const r = store.reward(arg);
       if (!r) break;
-      const answer = await dialog.showMessageBox(win, {
+      const answer = context.browser ? { response: context.confirmed ? 1 : 0 } : await dialog.showMessageBox(win, {
         type: "warning",
         message: tr(r.remoteId ? "Удалить «{title}» и её награду в Twitch?" : "Удалить «{title}»?", { title: r.title }),
         detail: tr("История и копии медиа сохранятся."),
@@ -612,7 +663,7 @@ async function execute(command, arg) {
       return;
     case "logout": {
       if (engine.playing()) throw Error("Дождитесь конца воспроизведения");
-      const answer = await dialog.showMessageBox(win, {
+      const answer = context.browser ? { response: context.confirmed ? 1 : 0 } : await dialog.showMessageBox(win, {
         message: tr("Выйти из Twitch?"),
         detail: tr("Награды и файлы останутся в приложении."),
         buttons: [tr("Отмена"), tr("Выйти")],
@@ -692,6 +743,7 @@ app.on("before-quit", (event) => {
   cleanup();
 });
 function cleanup() {
+  control?.close();
   obsRecovery?.close();
   twitch?.close();
   auth?.dispose();

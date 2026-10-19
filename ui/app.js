@@ -361,6 +361,13 @@ function flushLocalDraft() {
   draftStatus(tr("Черновик сохранён на этом ПК"));
 }
 window.flushLocalDraft = flushLocalDraft;
+window.releaseEditor = () => {
+  flushLocalDraft();
+  dirty = false;
+  draft = null;
+  selected = "";
+  renderEditor();
+};
 window.prepareExit = () => {
   flushLocalDraft();
   exiting = true;

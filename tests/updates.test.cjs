@@ -46,6 +46,21 @@ test("strict semantic version checks reject downgrade and malformed versions", (
   assert.equal(releaseInfo(release, "1.0.0"), null);
   assert.throws(() => releaseInfo({ ...release, prerelease: true }, "0.5.0"));
 });
+
+test("OBS updates are isolated from app releases and require plugin assets", async () => {
+  const obs = structuredClone(release);
+  obs.tag_name = "obs-v0.9.0";
+  obs.assets = ["reward-desk-obs-0.9.0-windows-x64-setup.exe", "reward-desk-obs-0.9.0-windows-x64-setup.exe.sha256"].map((name) => ({
+    name, state: "uploaded", size: 100,
+    browser_download_url: "https://github.com/foolka/reward-desk/releases/download/obs-v0.9.0/" + name,
+  }));
+  assert.throws(() => releaseInfo(release, "0.1.0", "obs"));
+  assert.throws(() => releaseInfo(obs, "0.1.0"));
+  const u = new Updates({ current: "0.8.0", kind: "obs", get: async () => new Response(JSON.stringify([release, obs])) });
+  assert.equal((await u.check()).release.name, "reward-desk-obs-0.9.0-windows-x64-setup.exe");
+  u.get = async () => new Response(JSON.stringify([release]));
+  assert.equal((await u.check()).status, "unavailable");
+});
 test("only exact repository assets and trusted HTTPS redirects accepted", () => {
   assert.ok(releaseInfo(release, "0.5.0"));
   const bad = structuredClone(release);
