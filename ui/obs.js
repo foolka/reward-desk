@@ -1,14 +1,15 @@
 function renderObsRecovery() {
   const recovery = state.obsRecovery || {};
-  $("#obs-recovery-status").textContent = recovery.status || "Не подключено";
+  const status = shellStatusText(recovery.status || "Не подключено");
+  $("#obs-recovery-status").textContent = status;
   $("#obs-auto").checked = !!recovery.enabled;
   const ready = state.overlay.obsClients > 0;
   const queued = state.jobs.filter((j) => j.state === "queued").length;
   $("#source-health").textContent = ready
-    ? "Источник OBS подключён"
+    ? tr("Источник OBS подключён")
     : state.overlay.outdated
-      ? "В OBS старая страница источника. Требуется обновление."
-      : `Источник OBS не отвечает${queued ? ` · ожидают награды: ${queued}` : ""}${recovery.enabled ? " · " + recovery.status : ""}`;
+      ? tr("В OBS старая страница источника. Требуется обновление.")
+      : `${tr("Источник OBS не отвечает")}${queued ? " · " + tr("ожидают награды: {count}", { count: queued }) : ""}${recovery.enabled ? " · " + status : ""}`;
   $("#source-health").classList.toggle("ready", ready);
 }
 act($("#obs-local"), async () => {

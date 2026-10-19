@@ -9,10 +9,16 @@ const {
   Tray,
   Menu,
   nativeImage,
+  nativeTheme,
 } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const { Store, importMedia } = require("./core/store.cjs");
+const { preferences, savePreferences } = require("./core/preferences.cjs");
+const { createI18n } = require("./ui/i18n.js");
+const nativeI18n = createI18n();
+nativeI18n.register(require("./core/native-locales.cjs"));
+const tr = (source, values) => nativeI18n.t(source, values);
 const { initialReward, integer, twitchFields } = require("./core/model.cjs");
 const { Engine } = require("./core/engine.cjs");
 const { Overlay } = require("./core/overlay.cjs");
@@ -86,6 +92,7 @@ function privateLoad(name) {
 function snapshot() {
   return {
     version: app.getVersion(),
+    preferences: preferences(store),
     rewards: store.rewards(),
     groups: groups?.list() || [],
     drafts: store.drafts(),
@@ -122,6 +129,19 @@ function show() {
   if (win.isMinimized()) win.restore();
   win.focus();
 }
+function applyPreferences() {
+  const value = preferences(store);
+  nativeI18n.setLocale(value.language);
+  nativeTheme.themeSource = value.theme;
+  if (win && !win.isDestroyed())
+    win.setBackgroundColor(value.theme === "dark" ? "#191c1c" : "#f5f7f7");
+  if (tray)
+    tray.setContextMenu(Menu.buildFromTemplate([
+      { label: tr("Открыть Reward Desk"), click: show },
+      { label: tr("Выход"), click: () => app.quit() },
+    ]));
+  return value;
+}
 app.on("second-instance", () => {
   if (win) show();
 });
@@ -134,6 +154,7 @@ app
     assertProfileLocation(root);
     assertProfileDatabase(root);
     store = new Store(root);
+    applyPreferences();
     rememberProfile(root, store);
     recordStartup(root, {
       version: app.getVersion(),
@@ -205,7 +226,7 @@ app
       minHeight: 560,
       title: "Reward Desk",
       frame: false,
-      backgroundColor: "#eef1f1",
+      backgroundColor: preferences(store).theme === "dark" ? "#191c1c" : "#f5f7f7",
       icon: fs.existsSync(icon) ? icon : undefined,
       webPreferences: {
         preload: path.join(__dirname, "preload.cjs"),
@@ -223,12 +244,7 @@ app
         nativeImage.createFromPath(icon).resize({ width: 24, height: 24 }),
       );
       tray.setToolTip("Reward Desk");
-      tray.setContextMenu(
-        Menu.buildFromTemplate([
-          { label: "Открыть Reward Desk", click: show },
-          { label: "Выход", click: () => app.quit() },
-        ]),
-      );
+      applyPreferences();
       tray.on("double-click", show);
     }
     win.on("close", (event) => {
@@ -236,6 +252,12 @@ app
         event.preventDefault();
         app.quit();
       }
+    });
+    ipcMain.on("ui-preferences", (event) => {
+      if (event.sender === win.webContents &&
+          event.senderFrame === win.webContents.mainFrame)
+        event.returnValue = preferences(store);
+      else event.returnValue = null;
     });
     ipcMain.handle("command", (event, command, arg) => {
       if (
@@ -276,7 +298,7 @@ app
   .catch((error) => {
     dialog.showErrorBox(
       "Reward Desk",
-      "Запуск остановлен. Данные сохранены.\n" + error.message,
+      tr("Запуск остановлен. Данные сохранены.") + "\n" + error.message,
     );
     app.exit(1);
   });
@@ -284,6 +306,9 @@ async function execute(command, arg) {
   if (pendingUpdate && command !== "state")
     throw Error("Приложение готовится к обновлению");
   switch (command) {
+    case "preferences":
+      savePreferences(store, arg);
+      return applyPreferences();
     case "minimize":
       win.minimize();
       return;
@@ -299,7 +324,7 @@ async function execute(command, arg) {
     case "recover-profile": {
       await win.webContents.executeJavaScript("window.flushLocalDraft()");
       const choice = await dialog.showOpenDialog(win, {
-        title: "Папка резервной копии Reward Desk",
+        title: tr("Папка резервной копии Reward Desk"),
         properties: ["openDirectory"],
       });
       if (choice.canceled) return;
@@ -307,11 +332,11 @@ async function execute(command, arg) {
       const missing = source.rewards.filter((r) => !store.reward(r.id));
       const answer = await dialog.showMessageBox(win, {
         type: "question",
-        message: `Восстановить локальные награды: ${missing.length}?`,
+        message: tr("Восстановить локальные награды: {count}?", { count: missing.length }),
         detail:
-          "Добавляются только отсутствующие локальные награды и их файлы. Текущие записи, вход Twitch и ссылка OBS не заменяются. Ничего не публикуется в Twitch.\n\n" +
+          tr("Добавляются только отсутствующие локальные награды и их файлы. Текущие записи, вход Twitch и ссылка OBS не заменяются. Ничего не публикуется в Twitch.") + "\n\n" +
           missing.map((r) => r.title).join("\n"),
-        buttons: ["Отмена", "Восстановить"],
+        buttons: [tr("Отмена"), tr("Восстановить")],
         defaultId: 0,
         cancelId: 0,
       });
@@ -436,6 +461,7 @@ async function execute(command, arg) {
     case "new":
       store.putReward({
         ...initialReward(arg === "video" ? "video" : "audio"),
+        title: tr(arg === "video" ? "Видео-награда" : "Звуковая награда"),
         createdAt: Date.now(),
       });
       break;
@@ -472,9 +498,9 @@ async function execute(command, arg) {
       if (!r) break;
       const answer = await dialog.showMessageBox(win, {
         type: "warning",
-        message: `Удалить «${r.title}»${r.remoteId ? " и её награду в Twitch" : ""}?`,
-        detail: "История и копии медиа сохранятся.",
-        buttons: ["Отмена", "Удалить"],
+        message: tr(r.remoteId ? "Удалить «{title}» и её награду в Twitch?" : "Удалить «{title}»?", { title: r.title }),
+        detail: tr("История и копии медиа сохранятся."),
+        buttons: [tr("Отмена"), tr("Удалить")],
         defaultId: 0,
         cancelId: 0,
       });
@@ -490,7 +516,7 @@ async function execute(command, arg) {
           properties: ["openFile", "multiSelections"],
           filters: [
             {
-              name: r.kind === "video" ? "Видео" : "Аудио",
+              name: tr(r.kind === "video" ? "Видео" : "Аудио"),
               extensions:
                 r.kind === "video"
                   ? ["mp4", "webm"]
@@ -587,9 +613,9 @@ async function execute(command, arg) {
     case "logout": {
       if (engine.playing()) throw Error("Дождитесь конца воспроизведения");
       const answer = await dialog.showMessageBox(win, {
-        message: "Выйти из Twitch?",
-        detail: "Награды и файлы останутся в приложении.",
-        buttons: ["Отмена", "Выйти"],
+        message: tr("Выйти из Twitch?"),
+        detail: tr("Награды и файлы останутся в приложении."),
+        buttons: [tr("Отмена"), tr("Выйти")],
         defaultId: 0,
         cancelId: 0,
       });
@@ -636,7 +662,7 @@ app.on("before-quit", (event) => {
         if (closing) {
           dialog.showErrorBox(
             "Reward Desk",
-            "Ошибка завершения приложения. Данные профиля не заменялись. Проверьте журнал обновления.",
+            tr("Ошибка завершения приложения. Данные профиля не заменялись. Проверьте журнал обновления."),
           );
           app.exit(1);
           return;
@@ -653,7 +679,7 @@ app.on("before-quit", (event) => {
         }
         dialog.showErrorBox(
           "Reward Desk",
-          "Не удалось сохранить черновик. Закрытие отменено. Нажмите «Сохранить» и повторите выход.",
+          tr("Не удалось сохранить черновик. Закрытие отменено. Нажмите «Сохранить» и повторите выход."),
         );
       });
     return;

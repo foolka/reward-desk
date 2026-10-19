@@ -107,18 +107,29 @@
     if (!button) return;
     hide();
     anchor = button;
-    tooltip.textContent = descriptions[button.dataset.help];
+    tooltip.textContent = tr(descriptions[button.dataset.help]);
     tooltip.hidden = false;
     button.setAttribute("aria-describedby", tooltip.id);
     position();
   }
   function add(target, key) {
     if (!target || target.querySelector(".option-help")) return;
+    // Keep the translated leaf separate from the help button during static binding.
+    if (target.dataset.i18n && !target.children.length) {
+      const text = document.createElement("span");
+      text.dataset.i18n = target.dataset.i18n;
+      text.textContent = target.textContent;
+      delete target.dataset.i18n;
+      target.replaceChildren(text);
+    }
     const button = document.createElement("button");
     button.type = "button";
     button.className = "option-help";
     button.dataset.help = key;
-    button.setAttribute("aria-label", "Справка: " + target.textContent.trim());
+    button.dataset.helpLabel = "";
+    button.setAttribute("aria-label", tr("Справка: {label}", {
+      label: target.textContent.trim(),
+    }));
     button.innerHTML = '<i data-lucide="circle-help" aria-hidden="true"></i>';
     target.append(button);
   }
@@ -126,10 +137,11 @@
     const label = control?.closest("label");
     if (!label || label.querySelector(".option-help")) return;
     if (label.classList.contains("check")) return add(label, key);
-    const text = [...label.childNodes].find(
+    const text = label.querySelector(":scope > .field-label, :scope > span:not(.select-control)") || [...label.childNodes].find(
       (node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim(),
     );
     if (!text) return;
+    if (text.classList?.contains("field-label")) return add(text, key);
     const heading = document.createElement("span");
     heading.className = "field-label";
     text.before(heading);
@@ -183,6 +195,18 @@
         add(media.children[n + 1], key),
       );
     }
+    refreshLanguage();
+  }
+  function refreshLanguage() {
+    document.querySelectorAll("[data-help-label]").forEach((button) => {
+      button.setAttribute("aria-label", tr("Справка: {label}", {
+        label: button.parentElement.textContent.trim(),
+      }));
+    });
+    if (anchor) {
+      tooltip.textContent = tr(descriptions[anchor.dataset.help]);
+      position();
+    }
   }
   document.addEventListener("pointerover", (event) => {
     const button = event.target.closest(".option-help");
@@ -222,5 +246,5 @@
     },
     true,
   );
-  window.RewardHelp = { enhance };
+  window.RewardHelp = { enhance, refreshLanguage };
 })();

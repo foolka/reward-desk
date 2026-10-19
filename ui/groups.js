@@ -1,9 +1,22 @@
-let groupSelected = "";
+let groupSelected = "",
+  groupResultSource = "",
+  groupResultErrors = [];
+function renderGroupResult() {
+  $("#group-result").textContent = groupResultErrors.length
+    ? groupResultErrors.map((e) => `${e.title}: ${tr(e.message)}`).join("\n")
+    : tr(groupResultSource);
+}
+function refreshGroupsLanguage() {
+  if (!$("#groups-dialog").open) return;
+  const option = $("#group-select option[value='']");
+  if (option) option.textContent = tr("Новая группа");
+  renderGroupResult();
+}
 function showGroup(id = "") {
   groupSelected = id;
   const group = state.groups?.find((g) => g.id === id);
   $("#group-select").innerHTML =
-    '<option value="">Новая группа</option>' +
+    `<option value="">${esc(tr("Новая группа"))}</option>` +
     (state.groups || [])
       .map((g) => `<option value="${esc(g.id)}">${esc(g.name)}</option>`)
       .join("");
@@ -11,8 +24,9 @@ function showGroup(id = "") {
   $("#group-name").value = group?.name || "";
   $("#group-color").value = group?.color || "#239d89";
   $("#group-delete").disabled = !group;
-  $("#group-result").textContent =
-    group?.errors?.map((e) => `${e.title}: ${e.message}`).join("\n") || "";
+  groupResultSource = "";
+  groupResultErrors = group?.errors || [];
+  renderGroupResult();
   $("#group-members").innerHTML = state.rewards
     .map(
       (r) =>
@@ -38,7 +52,9 @@ act($("#group-save"), async () => {
     members: $$("#group-members input:checked").map((el) => el.value),
   };
   controls.forEach((el) => (el.disabled = true));
-  $("#group-result").textContent = "Применение цвета…";
+  groupResultSource = "Применение цвета…";
+  groupResultErrors = [];
+  renderGroupResult();
   try {
     const result = await command("group-save", input);
     await command("state");
@@ -47,9 +63,9 @@ act($("#group-save"), async () => {
       select(selected);
     }
     showGroup(result.id);
-    $("#group-result").textContent = result.errors.length
-      ? result.errors.map((e) => `${e.title}: ${e.message}`).join("\n")
-      : "Сохранено. Цвет применён.";
+    groupResultSource = "Сохранено. Цвет применён.";
+    groupResultErrors = result.errors;
+    renderGroupResult();
   } finally {
     controls.forEach((el) => (el.disabled = false));
     $("#group-delete").disabled = !groupSelected;

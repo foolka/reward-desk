@@ -91,10 +91,12 @@ const snapshot = {
           dashboard: 0,
         };
         window.desk = {
+          uiPreferences: { theme: "light", language: "ru" },
           stashDraft: () => ({ ok: true }),
           filePath: () => "",
           onState: (fn) => (window.emitState = fn),
           command: async (name, arg) => {
+            if (name === "preferences") return clone(arg);
             if (name === "state") return clone(mock.snapshot);
             if (name === "channel-list") return clone(mock.catalog);
             if (name === "channel-dashboard") {
@@ -278,6 +280,18 @@ const snapshot = {
     await page.locator("#channel-form [data-field=input]").check();
     await page.locator("#channel-form [data-limit=cooldown]").check();
     await page.locator("#channel-form [data-field=cooldown]").fill("45");
+    const costInput = await page.locator("#channel-form [data-field=cost]").evaluateHandle((el) => el);
+    await page.locator("#channel-form [data-field=cost]").fill("");
+    await page.locator("#channel-form [data-field=cost]").pressSequentially("12e");
+    await page.locator("#language").selectOption("en");
+    assert.equal(await costInput.evaluate((el) => el.isConnected && el.validity.badInput), true);
+    await page.locator("#channel-form [data-field=cost]").fill("950");
+    await page.locator("#channel-form [data-limit=cooldown]").uncheck();
+    assert.equal(await page.locator("#channel-form [data-field=cooldown]").isDisabled(), true);
+    await page.locator("#channel-form [data-limit=cooldown]").check();
+    await page.locator("#channel-form [data-field=cooldown]").fill("45");
+    assert.equal(await page.evaluate(() => channelDraft.cooldown), 45);
+    await page.locator("#language").selectOption("ru");
     await page.evaluate(() => emitState(structuredClone(mock.snapshot)));
     assert.equal(
       await page.locator("#channel-form [data-field=cost]").inputValue(),

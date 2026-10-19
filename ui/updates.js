@@ -1,5 +1,5 @@
 let promptedUpdate = "";
-function renderUpdates() {
+function renderUpdates(prompt = true) {
   const update = state.updates || {};
   const busy = ["checking", "downloading", "installing"].includes(
     update.status,
@@ -8,12 +8,12 @@ function renderUpdates() {
   $("#auto-updates").checked = update.enabled !== false;
   $("#check-updates").disabled = busy;
   $("#update-status").textContent =
-    update.message || "Проверка ещё не выполнена";
+    shellStatusText(update.message || "Проверка ещё не выполнена");
   $("#show-update").hidden = !update.release;
-  $("#update-message").textContent = update.message || "";
+  $("#update-message").textContent = shellStatusText(update.message || "");
   $("#update-title").textContent = update.release
-    ? `Доступна версия ${update.release.version}`
-    : "Обновление Reward Desk";
+    ? tr("Доступна версия {version}", { version: update.release.version })
+    : tr("Обновление Reward Desk");
   $("#update-notes").textContent = update.release?.notes || "";
   $("#update-progress").hidden = !installing;
   $("#update-progress").value = update.progress || 0;
@@ -21,7 +21,9 @@ function renderUpdates() {
     update.status !== "available" || !update.installable;
   $("#update-later").disabled = installing;
   if (
+    prompt &&
     update.status === "available" &&
+    update.release &&
     promptedUpdate !== update.release.version
   ) {
     promptedUpdate = update.release.version;

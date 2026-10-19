@@ -7,10 +7,6 @@ let channelCatalog = null,
   channelError = "",
   channelColors = new Set(),
   channelSort = { key: "", direction: 1 };
-const channelCollator = new Intl.Collator("ru", {
-  numeric: true,
-  sensitivity: "base",
-});
 function rewardColor(r) {
   const color = r.settings.background;
   return /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : "#777777";
@@ -89,7 +85,11 @@ function renderChannel() {
       r.settings.cost >= min &&
       r.settings.cost <= max,
   );
-  if (channelSort.key)
+  if (channelSort.key) {
+    const channelCollator = new Intl.Collator(RewardI18n.locale, {
+      numeric: true,
+      sensitivity: "base",
+    });
     items.sort((a, b) => {
       const order =
         channelSort.key === "cost"
@@ -100,18 +100,24 @@ function renderChannel() {
             );
       return order * channelSort.direction;
     });
+  }
   $("#channel-range-error").hidden = validRange;
   minInput.setAttribute("aria-invalid", String(!validRange));
   maxInput.setAttribute("aria-invalid", String(!validRange));
   $("#channel-filter-summary").hidden =
     !Object.values(active).some(Boolean) && filter === "all";
   $("#channel-filter-count").textContent =
-    `${items.length} из ${channelCatalog?.items.length || 0} наград`;
+    tr("{count} из {total} наград", {
+      count: items.length,
+      total: channelCatalog?.items.length || 0,
+    });
   $$("[data-channel-menu]").forEach((button) => {
     button.classList.toggle("active", active[button.dataset.channelMenu]);
     button.setAttribute(
       "aria-label",
-      `${button.title}${active[button.dataset.channelMenu] ? ": включён" : ""}`,
+      active[button.dataset.channelMenu]
+        ? tr("{filter}: включён", { filter: tr(button.dataset.i18nTitle) })
+        : tr(button.dataset.i18nTitle),
     );
   });
   $$("[data-channel-sort]").forEach((button) => {
@@ -146,30 +152,34 @@ function renderChannel() {
     $("#channel-colors").innerHTML = colors
       .map(
         (color) =>
-          `<button data-filter-color="${color}" style="background:${color}" title="${color.toUpperCase()}" aria-label="Цвет ${color.toUpperCase()}" aria-pressed="false"></button>`,
+          `<button data-filter-color="${color}" style="background:${color}" title="${color.toUpperCase()}" aria-pressed="false"></button>`,
       )
       .join("");
   }
-  $$("[data-filter-color]").forEach((button) =>
+  $$("[data-filter-color]").forEach((button) => {
+    button.setAttribute(
+      "aria-label",
+      tr("Цвет {color}", { color: button.dataset.filterColor.toUpperCase() }),
+    );
     button.setAttribute(
       "aria-pressed",
       String(channelColors.has(button.dataset.filterColor)),
-    ),
-  );
+    );
+  });
   $("#channel-list").innerHTML = items
     .map(
       (r) => `<tr class="${r.id === channelSelected ? "selected" : ""}">
     <td><span class="reward-swatch" style="background:${rewardColor(r)}" title="${esc(r.settings.background)}"></span></td>
-    <td><strong>${esc(r.settings.title)}</strong><small>${!r.settings.enabled ? "Отключена" : r.settings.paused ? "На паузе" : r.inStock === false ? "Недоступна сейчас" : "Активна"} · ${r.manageable ? "Reward Desk" : "Только просмотр"}</small></td>
-    <td class="reward-cost">${Number(r.settings.cost).toLocaleString("ru")}</td>
-    <td><button data-channel-id="${esc(r.id)}" title="${r.manageable ? "Редактировать" : "Просмотреть"} ${esc(r.settings.title)}" ${channelBusy ? "disabled" : ""}>${icon(r.manageable ? "pencil" : "eye")}</button></td></tr>`,
+    <td><strong>${esc(r.settings.title)}</strong><small>${esc(tr(!r.settings.enabled ? "Отключена" : r.settings.paused ? "На паузе" : r.inStock === false ? "Недоступна сейчас" : "Активна"))} · ${r.manageable ? "Reward Desk" : esc(tr("Только просмотр"))}</small></td>
+    <td class="reward-cost">${Number(r.settings.cost).toLocaleString(RewardI18n.locale)}</td>
+    <td><button data-channel-id="${esc(r.id)}" title="${esc(tr(r.manageable ? "Редактировать {title}" : "Просмотреть {title}", { title: r.settings.title }))}" ${channelBusy ? "disabled" : ""}>${icon(r.manageable ? "pencil" : "eye")}</button></td></tr>`,
     )
     .join("");
   $$("[data-channel-id]").forEach((el) =>
     act(el, () => selectChannel(el.dataset.channelId)),
   );
   $("#channel-empty").hidden = items.length > 0;
-  $("#channel-empty").textContent = channelBusy
+  $("#channel-empty").textContent = tr(channelBusy
     ? "Загрузка…"
     : !state.auth.user
       ? "Войдите через Twitch во вкладке «Подключение»"
@@ -177,16 +187,19 @@ function renderChannel() {
         ? "Список не загружен"
         : channelCatalog.items.length
           ? "Ничего не найдено"
-          : "Пользовательских наград пока нет";
+          : "Пользовательских наград пока нет");
   $("#channel-updated").textContent = channelBusy
-    ? "Обновление…"
+    ? tr("Обновление…")
     : channelCatalog
-      ? `${channelCatalog.items.length} наград · обновлено ${new Date(channelCatalog.updatedAt).toLocaleTimeString("ru")}`
-      : "Пользовательские награды Twitch";
+      ? tr("{count} наград · обновлено {time}", {
+          count: channelCatalog.items.length,
+          time: new Date(channelCatalog.updatedAt).toLocaleTimeString(RewardI18n.locale),
+        })
+      : tr("Пользовательские награды Twitch");
   $("#channel-refresh").disabled = channelBusy || !state.auth.user;
   $("#channel-dashboard").disabled = !state.auth.user;
   $("#channel-error").hidden = !channelError;
-  $("#channel-error").textContent = channelError;
+  $("#channel-error").textContent = tr(channelError);
   icons();
   $$(".column-popover:popover-open").forEach(positionChannelPopover);
 }
@@ -195,7 +208,7 @@ async function selectChannel(id) {
   if (
     channelDirty &&
     !(await confirmAction(
-      "Есть несохранённые изменения. Перейти без сохранения?",
+      tr("Есть несохранённые изменения. Перейти без сохранения?"),
     ))
   )
     return;
@@ -211,13 +224,13 @@ function renderChannelEditor() {
   const r = channelCatalog?.items.find((r) => r.id === channelSelected);
   if (!r || !channelDraft) {
     $("#channel-editor").innerHTML =
-      '<div class="empty">Выберите награду</div>';
+      `<div class="empty">${esc(tr("Выберите награду"))}</div>`;
     return;
   }
   $("#channel-editor").innerHTML =
-    `<div class="editor-head"><h2>${esc(r.settings.title)}</h2><span class="status">${r.manageable ? "Редактирование" : "Только просмотр"}</span></div>
-    ${!r.manageable ? '<div class="notice">Награда создана вне этой регистрации Reward Desk. Twitch API не разрешает её изменение здесь.</div><button id="channel-open-twitch">' + icon("external-link") + "Открыть в Twitch</button>" : ""}
-    <form id="channel-form"><fieldset class="${r.manageable ? "" : "readonly"}" ${channelBusy ? "disabled" : ""}>${settingsMarkup(channelDraft)}<div class="save-footer" ${!r.manageable ? "hidden" : ""}><button type="button" id="channel-reset" title="Отменить изменения">${icon("undo-2")}</button><button id="channel-save" type="submit" class="primary">${icon("save")}Сохранить в Twitch${channelDirty ? " *" : ""}</button></div></fieldset></form>`;
+    `<div class="editor-head"><h2>${esc(r.settings.title)}</h2><span class="status">${esc(tr(r.manageable ? "Редактирование" : "Только просмотр"))}</span></div>
+    ${!r.manageable ? `<div class="notice">${esc(tr("Награда создана вне этой регистрации Reward Desk. Twitch API не разрешает её изменение здесь."))}</div><button id="channel-open-twitch">${icon("external-link")}${esc(tr("Открыть в Twitch"))}</button>` : ""}
+    <form id="channel-form"><fieldset class="${r.manageable ? "" : "readonly"}" ${channelBusy ? "disabled" : ""}>${settingsMarkup(channelDraft)}<div class="save-footer" ${!r.manageable ? "hidden" : ""}><button type="button" id="channel-reset" title="${esc(tr("Отменить изменения"))}">${icon("undo-2")}</button><button id="channel-save" type="submit" class="primary">${icon("save")}${esc(tr("Сохранить в Twitch"))}${channelDirty ? " *" : ""}</button></div></fieldset></form>`;
   if (!r.manageable)
     $("#channel-form")
       .querySelectorAll("input, select, textarea, button")
@@ -229,7 +242,7 @@ function renderChannelEditor() {
     () => channelDraft,
     () => {
       channelDirty = true;
-      $("#channel-save").innerHTML = icon("save") + "Сохранить в Twitch *";
+      $("#channel-save").innerHTML = icon("save") + esc(tr("Сохранить в Twitch")) + " *";
       icons();
     },
   );
@@ -245,7 +258,7 @@ async function loadChannel() {
   if (channelBusy) return;
   if (
     channelDirty &&
-    !(await confirmAction("Обновить список без сохранения изменений?"))
+    !(await confirmAction(tr("Обновить список без сохранения изменений?")))
   )
     return;
   if (!state.auth.user) {
