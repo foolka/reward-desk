@@ -1,4 +1,8 @@
 .browser-editor .window-titlebar { display: none; }
+.browser-editor main > .workspace {
+  max-width: none;
+  margin-inline: 0;
+}
 #browser-disconnected {
   position: fixed;
   z-index: 10000;

@@ -10,12 +10,13 @@
 class RewardDock : public QWidget {
 public:
     explicit RewardDock(const QString &profile, const QString &runtime = {}, bool offlineTest = false);
+    bool isConnected() const { return online; }
 private:
     QString profile, runtime, origin, token, sourceUrl, language = "ru";
     bool paused = false, busy = false, online = false, started = false, offlineTest;
     QNetworkAccessManager network;
     QTimer timer;
-    QLabel *heading, *connection, *source, *queue, *warning, *update;
+    QLabel *heading, *connection, *source, *queue, *warning, *update, *logTitle, *logEmpty;
     QPushButton *pauseButton, *stopButton, *editorButton, *copyButton, *startButton, *updateButton;
     QPlainTextEdit *log;
     QString text(const char *ru, const char *uk, const char *en) const;

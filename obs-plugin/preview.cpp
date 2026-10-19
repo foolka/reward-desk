@@ -16,6 +16,9 @@ int main(int argc, char **argv) {
     RewardDock dock(profile, {}, true);
     dock.resize(320, 540); dock.setWindowTitle("Reward Desk OBS - isolated preview"); dock.show();
     const auto screenshot = qEnvironmentVariable("REWARD_DESK_OBS_SCREENSHOT");
-    if (!screenshot.isEmpty()) QTimer::singleShot(3500, &app, [&] { dock.grab().save(screenshot); app.quit(); });
+    if (!screenshot.isEmpty()) QTimer::singleShot(3500, &app, [&] {
+        dock.grab().save(screenshot);
+        app.exit(qEnvironmentVariableIsSet("REWARD_DESK_OBS_REQUIRE_CONNECTED") && !dock.isConnected() ? 5 : 0);
+    });
     return app.exec();
 }

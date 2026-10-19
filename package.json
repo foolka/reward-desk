@@ -1,7 +1,7 @@
 {
   "name": "reward-desk",
   "productName": "Reward Desk",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "private": true,
   "description": "Direct Twitch sound and video rewards for OBS",
   "author": "FermionaPlay",

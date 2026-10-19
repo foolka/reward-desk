@@ -46,6 +46,15 @@ async function open() {
   assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible()), false);
   await open();
   assert.equal(await page.locator(".window-titlebar").isVisible(), false);
+  for (const width of [2536, 1600, 760]) {
+    await page.setViewportSize({ width, height: 900 });
+    assert.equal(await page.locator('#tab-rewards > aside').evaluate((el) => Math.round(el.getBoundingClientRect().left)), 0,
+      `sidebar is flush left at ${width}px`);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await page.screenshot({ path: path.join(out, `obs-editor-width-${width}.png`) });
+  }
+  await page.screenshot({ path: path.join(out, "obs-editor-empty.png") });
+  await page.setViewportSize({ width: 1240, height: 860 });
   await page.locator("#new-reward").click();
   await page.locator('[data-field="title"]').fill("Browser reward");
   const chooser = page.waitForEvent("filechooser"); await page.locator("#add-files").click();
@@ -100,6 +109,7 @@ async function open() {
     const result = spawnSync(preview, [], { windowsHide: true, timeout: 15000,
       env: { ...process.env, Path: path.join(qt, "bin") + ";" + process.env.Path,
         QT_PLUGIN_PATH: path.join(qt, "plugins"), REWARD_DESK_OBS_TEST_PROFILE: profile,
+        REWARD_DESK_OBS_REQUIRE_CONNECTED: "1",
         REWARD_DESK_OBS_SCREENSHOT: path.join(out, "obs-dock.png") } });
     assert.equal(result.status, 0, String(result.stderr));
   }

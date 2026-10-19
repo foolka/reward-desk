@@ -22,7 +22,7 @@ RewardDock::RewardDock(const QString &path, const QString &moduleRuntime, bool t
     auto layout = new QVBoxLayout(this);
     layout->setContentsMargins(12, 12, 12, 12);
     layout->setSpacing(9);
-    heading = new QLabel("Reward Desk OBS 0.8.0", this);
+    heading = new QLabel("Reward Desk OBS 0.8.1", this);
     auto font = heading->font(); font.setBold(true); heading->setFont(font);
     layout->addWidget(heading);
     connection = new QLabel(this); connection->setWordWrap(true); layout->addWidget(connection);
@@ -53,8 +53,11 @@ RewardDock::RewardDock(const QString &path, const QString &moduleRuntime, bool t
     connect(updateButton, &QPushButton::clicked, this, [this] { command("check-updates"); });
     update = new QLabel(this); update->setWordWrap(true); layout->addWidget(update);
     warning = new QLabel(this); warning->setWordWrap(true); layout->addWidget(warning);
+    logTitle = new QLabel(this); layout->addWidget(logTitle);
+    logEmpty = new QLabel(this); logEmpty->setWordWrap(true); layout->addWidget(logEmpty);
     log = new QPlainTextEdit(this); log->setReadOnly(true); log->setMaximumBlockCount(5);
-    log->setMaximumHeight(110); log->setMinimumHeight(65); layout->addWidget(log);
+    log->setFrameShape(QFrame::NoFrame);
+    log->setMaximumHeight(90); log->setMinimumHeight(65); log->hide(); layout->addWidget(log);
     startButton = new QPushButton(this); startButton->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
     connect(startButton, &QPushButton::clicked, this, [this] { start(); });
     layout->addWidget(startButton); layout->addStretch();
@@ -76,6 +79,9 @@ void RewardDock::labels() {
     copyButton->setToolTip(text("Копировать ссылку OBS · 1920 × 1080", "Копіювати посилання OBS · 1920 × 1080", "Copy OBS URL · 1920 × 1080"));
     updateButton->setText(text("Обновления", "Оновлення", "Updates"));
     startButton->setText(text("Запустить Reward Desk", "Запустити Reward Desk", "Start Reward Desk"));
+    logTitle->setText(text("Последние события", "Останні події", "Recent events"));
+    logEmpty->setText(text("Пока нет событий", "Поки немає подій", "No events yet"));
+    log->setAccessibleName(logTitle->text());
 }
 void RewardDock::start() {
     if (offlineTest) return;
@@ -158,4 +164,5 @@ void RewardDock::accept(const QJsonObject &value) {
     QStringList lines;
     for (const auto &entry : value["logs"].toArray()) lines << entry.toObject()["message"].toString();
     const auto content = lines.join("\n"); if (log->toPlainText() != content) log->setPlainText(content);
+    log->setVisible(!lines.isEmpty()); logEmpty->setVisible(lines.isEmpty());
 }
