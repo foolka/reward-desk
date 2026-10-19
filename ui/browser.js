@@ -68,7 +68,7 @@
     },
     onState(callback) { listener = callback; },
     async command(command, arg) {
-      if (command === "state") { if (!state) throw Error("Нет соединения"); return state; }
+      if (command === "state") { state = await request("/api/state"); return state; }
       if (command === "copy-url") return navigator.clipboard.writeText(state.overlay.url);
       if (command === "copy-code") return navigator.clipboard.writeText(state.auth.pending?.code || "");
       if (command === "preview") return window.open(state.overlay.url, "_blank", "noopener");

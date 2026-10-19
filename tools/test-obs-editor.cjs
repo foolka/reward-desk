@@ -53,6 +53,13 @@ async function open() {
   await page.locator(".media-name").filter({ hasText: "sample.wav" }).waitFor();
   await page.locator("#save").click();
   await page.waitForFunction(() => !dirty && state.rewards.some((r) => r.title === "Browser reward" && r.items.length === 1));
+  await page.locator("#manage-groups").click();
+  await page.locator("#group-name").fill("Browser group");
+  await page.locator("#group-members input").first().check();
+  await page.locator("#group-save").click();
+  await page.waitForFunction(() => document.querySelector("#group-result").textContent.includes("Сохранено"));
+  assert.equal(await page.locator("#group-name").inputValue(), "Browser group", "saved group is immediately available, without waiting for poll");
+  await page.locator("#groups-dialog").evaluate((el) => el.close());
   assert.equal((await dock()).queued, 0);
   await dock("pause", true);
   await page.locator("#test-reward").click();
