@@ -201,7 +201,6 @@ class ObsRecovery {
       if (health.error) {this.status=health.error;this.missingSince=null;return;}
       if (health.obsClients > 0) {
         this.missingSince = null;
-        this.attempts = [];
         this.status = "Источник OBS отвечает";
         return;
       }

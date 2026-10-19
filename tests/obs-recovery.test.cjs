@@ -151,12 +151,21 @@ test('refresh rechecks URL and never touches a reassigned or locally unavailable
     assert.equal(f.requests.some(r=>r.type==='PressInputPropertiesButton'),false);
   }
 });
-test('successful recovery resets the retry budget; disabling closes the connection',async()=>{
+test('brief recovery cannot bypass refresh rate limits; disabling closes the connection',async()=>{
   const f=fixture();await f.recovery.tick();f.advance(21000);await f.recovery.tick();
   assert.equal(f.recovery.attempts.length,1);
-  f.setHealthy(1);await f.recovery.tick();assert.equal(f.recovery.attempts.length,0);
+  f.setHealthy(1);await f.recovery.tick();assert.equal(f.recovery.attempts.length,1);
   f.setHealthy(0);await f.recovery.tick();f.advance(21000);await f.recovery.tick();
+  assert.equal(f.requests.filter(r=>r.type==='PressInputPropertiesButton').length,1);
+  f.advance(39000);await f.recovery.tick();
   assert.equal(f.requests.filter(r=>r.type==='PressInputPropertiesButton').length,2);
+  for(let i=0;i<3;i++){
+    f.setHealthy(1);await f.recovery.tick();f.setHealthy(0);await f.recovery.tick();
+    f.advance(60000);await f.recovery.tick();
+  }
+  assert.equal(f.requests.filter(r=>r.type==='PressInputPropertiesButton').length,3);
+  f.advance(60000);await f.recovery.tick();
+  assert.equal(f.requests.filter(r=>r.type==='PressInputPropertiesButton').length,4);
   f.setEnabled(false);await f.recovery.tick();assert.equal(f.recovery.socket,null);
   assert.equal(f.recovery.view().status,'Защита выключена');
 });
