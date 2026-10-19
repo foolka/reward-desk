@@ -89,6 +89,14 @@ async function open() {
   if (process.env.QT_SDK) {
     const preview = path.join(root, "obs-plugin/build/Release/reward-desk-obs-preview.exe");
     const qt = process.env.QT_SDK;
+    const profilePathFile = path.join(profile, "native-profile-path.txt");
+    const pathCheck = spawnSync(preview, ["--profile-path-check"], { windowsHide: true, timeout: 15000,
+      env: { ...process.env, Path: path.join(qt, "bin") + ";" + process.env.Path,
+        QT_PLUGIN_PATH: path.join(qt, "plugins"), REWARD_DESK_OBS_PATH_OUTPUT: profilePathFile } });
+    assert.equal(pathCheck.status, 0, String(pathCheck.stderr));
+    const roaming = await app.evaluate(({ app }) => app.getPath("appData"));
+    assert.equal(path.resolve(fs.readFileSync(profilePathFile, "utf8")).toLowerCase(),
+      path.join(roaming, "RewardDeskOBS").toLowerCase(), "native dock and runtime resolve the same roaming profile");
     const result = spawnSync(preview, [], { windowsHide: true, timeout: 15000,
       env: { ...process.env, Path: path.join(qt, "bin") + ";" + process.env.Path,
         QT_PLUGIN_PATH: path.join(qt, "plugins"), REWARD_DESK_OBS_TEST_PROFILE: profile,

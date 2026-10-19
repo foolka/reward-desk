@@ -1,8 +1,16 @@
 #include <QApplication>
 #include <QDir>
+#include <QFile>
 #include "dock.hpp"
+#include "profile.hpp"
 int main(int argc, char **argv) {
     QApplication app(argc, argv);
+    if (app.arguments().contains("--profile-path-check")) {
+        QFile output(qEnvironmentVariable("REWARD_DESK_OBS_PATH_OUTPUT"));
+        const auto profile = rewardProfilePath();
+        if (profile.isEmpty() || !output.open(QIODevice::WriteOnly)) return 3;
+        return output.write(profile.toUtf8()) > 0 ? 0 : 4;
+    }
     const auto profile = qEnvironmentVariable("REWARD_DESK_OBS_TEST_PROFILE");
     if (profile.isEmpty() || !QDir::isAbsolutePath(profile)) return 2;
     RewardDock dock(profile, {}, true);

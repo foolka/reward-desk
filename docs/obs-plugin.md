@@ -16,7 +16,7 @@ Private Windows x64 preview. The OBS plugin and standalone app are alternative p
 | Source port | 18874 | 18875 |
 | Release tag | vX.Y.Z | obs-vX.Y.Z |
 
-The bundled runtime contains a mode marker, so launching its executable directly still selects the plugin profile. No live profile is copied, discovered, merged or overwritten. Credentials use Windows DPAPI. One instance per profile owns SQLite. Do not run both products for the same rewards/account at once.
+The bundled runtime contains a mode marker, so launching its executable directly still selects the plugin profile. The native dock resolves Windows Roaming AppData explicitly, matching Electron; Qt's generic data directory points to Local AppData instead. A native/runtime regression test checks this agreement. No live profile is copied, discovered, merged or overwritten. Credentials use Windows DPAPI. One instance per profile owns SQLite. Do not run both products for the same rewards/account at once.
 
 The native Qt dock launches its own bundled runtime without a visible Electron window. It uses loopback HTTP with a per-process random capability from the plugin profile. Source capability is separate and remains stable across restarts. Dock permissions only cover status, pause, stop, reconnect, opening the editor and checking updates. The browser editor receives a different capability in the URL fragment, removes it from the address bar and has a single-writer lease. Arbitrary file paths, native lifecycle commands and recovery paths are not accepted by the HTTP API. Uploads are streamed with a 512 MiB limit into a unique temporary directory and imported through the existing media validator.
 
