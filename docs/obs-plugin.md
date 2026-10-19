@@ -1,6 +1,6 @@
 # Reward Desk OBS
 
-Private Windows x64 preview. The OBS plugin and standalone app are alternative products, not two launchers for one database.
+Public Windows x64 release for OBS Studio 32+. The OBS plugin and standalone app are alternative products, not two launchers for one database.
 
 ![Native OBS dock](screenshots/obs-dock.png)
 
@@ -22,7 +22,7 @@ The native Qt dock launches its own bundled runtime without a visible Electron w
 
 The runtime exits gracefully when its originating OBS process exits. An interrupted started job remains in attention state on next start; it is never replayed silently. Closing the editor tab does not stop playback. Existing source heartbeat/reconnect and optional source-only OBS recovery remain in place.
 
-Profile recovery uses a native Windows folder picker and confirmation; HTTP requests cannot supply a recovery path. Opening the data folder only opens the fixed plugin profile. Recovery accepts missing unpublished local rewards, not a transfer of existing Twitch rewards or credentials. The private updater does not embed GitHub credentials. Install plugin updates using its separate installer after closing OBS; never use the app installer for the plugin.
+Profile recovery uses a native Windows folder picker and confirmation; HTTP requests cannot supply a recovery path. Opening the data folder only opens the fixed plugin profile. Recovery accepts missing unpublished local rewards, not a transfer of existing Twitch rewards or credentials. Public updates do not require GitHub credentials. Install plugin updates using its separate installer after closing OBS; never use the app installer for the plugin.
 
 ## Build
 

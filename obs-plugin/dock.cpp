@@ -158,7 +158,7 @@ void RewardDock::accept(const QJsonObject &value) {
     update->setText(status == "available" ? text("Доступно обновление плагина. Закройте OBS и запустите его установщик.", "Доступне оновлення плагіна. Закрийте OBS і запустіть інсталятор.", "Plugin update available. Close OBS and run its installer.") :
         status == "checking" ? text("Проверяем обновления…", "Перевіряємо оновлення…", "Checking updates…") :
         status == "current" ? text("Установлена актуальная версия", "Установлено актуальну версію", "You are up to date") :
-        status == "unavailable" ? text("Приватные выпуски: требуется доступ GitHub", "Приватні випуски: потрібен доступ GitHub", "Private releases: GitHub access required") :
+        status == "unavailable" ? text("Публичный выпуск пока недоступен", "Публічний випуск поки недоступний", "Public release is not available yet") :
         status == "error" ? text("Не удалось проверить обновления", "Не вдалося перевірити оновлення", "Could not check for updates") :
         text("Проверка обновлений ещё не выполнена", "Перевірку оновлень ще не виконано", "Updates have not been checked"));
     QStringList lines;

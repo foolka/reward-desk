@@ -747,7 +747,7 @@ function captionMarkup() {
   </div>${textPlacementMarkup("duration", d, !d.enabled)}</div></section>`;
 }
 function renderStatus() {
-  $(".version").textContent = tr("PRIVATE {version}", { version: state.version });
+  $(".version").textContent = `v${state.version}`;
   $("#connection-text").textContent = state.auth.user
     ? `${state.auth.user.login} · ${tr(state.twitch)}`
     : tr("Twitch не подключён");

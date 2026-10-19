@@ -58,6 +58,8 @@ test("OBS updates are isolated from app releases and require plugin assets", asy
   assert.throws(() => releaseInfo(obs, "0.1.0"));
   const u = new Updates({ current: "0.8.0", kind: "obs", get: async () => new Response(JSON.stringify([release, obs])) });
   assert.equal((await u.check()).release.name, "reward-desk-obs-0.9.0-windows-x64-setup.exe");
+  const app = new Updates({ current: "0.5.0", get: async () => new Response(JSON.stringify([obs, release, { ...release, tag_name: "v9.0.0", prerelease: true }])) });
+  assert.equal((await app.check()).release.name, name);
   u.get = async () => new Response(JSON.stringify([release]));
   assert.equal((await u.check()).status, "unavailable");
 });
@@ -98,8 +100,8 @@ test("verified download is complete and exact; mismatched hash cannot become ins
     current: "0.5.0",
     get: async (url) =>
       new Response(
-        url.endsWith("/latest")
-          ? JSON.stringify(release)
+        url.endsWith("?per_page=100")
+          ? JSON.stringify([release])
           : url.endsWith(".sha256")
             ? `${corrupt ? "0".repeat(64) : hash}  ${name}\n`
             : payload,
