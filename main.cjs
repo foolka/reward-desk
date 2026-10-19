@@ -38,6 +38,7 @@ const {
   recordStartup,
 } = require("./core/profile.cjs");
 const { readRecovery, restoreMissing } = require("./core/profile-recovery.cjs");
+const { startupNotice } = require("./core/startup-notice.cjs");
 const test = process.argv.includes("--test-mode");
 const obsPlugin = process.argv.includes("--obs-plugin") ||
   fs.existsSync(path.join(process.resourcesPath, "reward-desk-obs.json"));
@@ -346,11 +347,13 @@ app
     setInterval(changed, 3000).unref();
   })
   .catch((error) => {
-    dialog.showErrorBox(
-      "Reward Desk",
-      tr("Запуск остановлен. Данные сохранены.") + "\n" + error.message,
-    );
-    app.exit(1);
+    // Never open a redirected profile, even after the informational notice closes.
+    try {
+      if (!store) nativeI18n.setLocale(app.getLocale().split("-")[0]);
+      dialog.showMessageBoxSync(startupNotice(error, { obsPlugin, tr }));
+    } finally {
+      app.exit(1);
+    }
   });
 async function execute(command, arg, context = {}) {
   if (pendingUpdate && command !== "state")

@@ -83,7 +83,10 @@ for (const redirected of ["probe", "database", "root", "wal", "identity"]) {
         },
       },
     };
-    assert.throws(() => assertProfileLocation(root, io), /перенаправляет/);
+    assert.throws(() => assertProfileLocation(root, io), {
+      code: "PROFILE_REDIRECTED",
+      message: /перенаправляет/,
+    });
     assert.equal(cleaned, true);
   });
 }

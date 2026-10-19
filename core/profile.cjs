@@ -46,7 +46,8 @@ function assertProfileLocation(root, io = fs) {
   try {
     io.writeFileSync(probe, "profile check", { flag: "wx" });
     const canonical = io.realpathSync.native(root);
-    if (!samePath(canonical, root)) throw Error(REDIRECTED);
+    if (!samePath(canonical, root))
+      throw Object.assign(Error(REDIRECTED), { code: "PROFILE_REDIRECTED" });
     const files = [
       probe,
       ...[
@@ -66,7 +67,7 @@ function assertProfileLocation(root, io = fs) {
           path.join(canonical, path.basename(file)),
         )
       )
-        throw Error(REDIRECTED);
+        throw Object.assign(Error(REDIRECTED), { code: "PROFILE_REDIRECTED" });
     }
   } finally {
     if (io.existsSync(probe)) io.unlinkSync(probe);

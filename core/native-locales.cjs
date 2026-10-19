@@ -1,5 +1,11 @@
 module.exports = {
   en: {
+    "Нужен обычный запуск": "Open from your usual shortcut",
+    "Windows направила этот запуск в другую папку профиля. Чтобы не открыть пустой список наград, программа не запущена. Существующие награды и настройки не изменены.": "Windows redirected this launch to a different profile folder. The app has not started to avoid opening an empty reward list. Existing rewards and settings have not been changed.",
+    "После завершения эфира закройте OBS и откройте его обычным ярлыком из меню «Пуск» или панели задач. Модуль Reward Desk OBS запустится вместе с ним.": "After your stream has ended, close OBS and reopen it from its usual Start menu or taskbar shortcut. Reward Desk OBS will start with it.",
+    "Откройте Reward Desk обычным ярлыком из меню «Пуск» или панели задач.": "Open Reward Desk from its usual Start menu or taskbar shortcut.",
+    "Понятно": "Got it", "Закрыть": "Close",
+    "Не удалось запустить программу": "Could not start the app",
     "Открыть Reward Desk": "Open Reward Desk", "Выход": "Quit",
     "Отмена": "Cancel", "Восстановить": "Restore", "Удалить": "Delete", "Выйти": "Sign out",
     "Папка резервной копии Reward Desk": "Reward Desk backup folder",
@@ -17,6 +23,12 @@ module.exports = {
     "Ошибка завершения приложения. Данные профиля не заменялись. Проверьте журнал обновления.": "Error closing the app. Profile data was not replaced. Check the update log.",
   },
   uk: {
+    "Нужен обычный запуск": "Потрібен звичайний запуск",
+    "Windows направила этот запуск в другую папку профиля. Чтобы не открыть пустой список наград, программа не запущена. Существующие награды и настройки не изменены.": "Windows перенаправила цей запуск до іншої теки профілю. Щоб не відкрити порожній список нагород, програму не запущено. Наявні нагороди й налаштування не змінено.",
+    "После завершения эфира закройте OBS и откройте его обычным ярлыком из меню «Пуск» или панели задач. Модуль Reward Desk OBS запустится вместе с ним.": "Після завершення ефіру закрийте OBS і відкрийте його звичайним ярликом із меню «Пуск» або панелі завдань. Модуль Reward Desk OBS запуститься разом із ним.",
+    "Откройте Reward Desk обычным ярлыком из меню «Пуск» или панели задач.": "Відкрийте Reward Desk звичайним ярликом із меню «Пуск» або панелі завдань.",
+    "Понятно": "Зрозуміло", "Закрыть": "Закрити",
+    "Не удалось запустить программу": "Не вдалося запустити програму",
     "Открыть Reward Desk": "Відкрити Reward Desk", "Выход": "Вийти",
     "Отмена": "Скасувати", "Восстановить": "Відновити", "Удалить": "Видалити", "Выйти": "Вийти",
     "Папка резервной копии Reward Desk": "Тека резервної копії Reward Desk",
