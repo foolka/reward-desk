@@ -1,5 +1,7 @@
 const { contextBridge, ipcRenderer, webUtils } = require("electron");
 contextBridge.exposeInMainWorld("desk", {
+  taskbarStatus: () => ipcRenderer.invoke('desk:taskbarStatus'),
+  taskbarPin: () => ipcRenderer.invoke('desk:taskbarPin'),
   uiPreferences: ipcRenderer.sendSync("ui-preferences"),
   command: (name, arg) => ipcRenderer.invoke("command", name, arg),
   stashDraft: (value) => ipcRenderer.sendSync("stash-draft", value),

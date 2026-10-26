@@ -1,7 +1,7 @@
 {
   "name": "reward-desk",
   "productName": "Reward Desk",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "private": true,
   "description": "Direct Twitch sound and video rewards for OBS",
   "author": "FermionaPlay",
@@ -32,8 +32,8 @@
     "lucide": "0.468.0"
   },
   "devDependencies": {
-    "electron": "42.11.8",
     "@electron/packager": "20.3.0",
+    "electron": "42.11.18",
     "playwright": "1.58.2"
   }
 }

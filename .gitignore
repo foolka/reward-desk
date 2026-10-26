@@ -11,3 +11,4 @@ auth*.json
 *.bin
 data/
 private/
+/core/taskbar-native.node

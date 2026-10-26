@@ -1,7 +1,7 @@
 const { packager } = require("@electron/packager");
 const fs = require("node:fs"),
   path = require("node:path");
-(async () => {
+(async () => { require('./build-taskbar.cjs').buildTaskbar();
   const obs = require("../core/product.cjs").obsPlugin;
   const root = path.resolve(__dirname, ".."),
     out = path.join(root, "release");
@@ -13,7 +13,7 @@ const fs = require("node:fs"),
     arch: "x64",
     out,
     overwrite: true,
-    asar: true,
+    asar: { unpack: '**/*.node' },
     prune: true,
     icon: path.join(root, "assets/icon.ico"),
     ignore: (file) => {

@@ -8,6 +8,7 @@ AppVersion={#AppVersion}
 AppPublisher=FermionaPlay
 AppPublisherURL=https://github.com/foolka/reward-desk
 DefaultDirName={localappdata}\Programs\Reward Desk
+DisableDirPage=yes
 DefaultGroupName=Reward Desk
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible

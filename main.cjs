@@ -271,6 +271,7 @@ app
         event.returnValue = preferences(store);
       else event.returnValue = null;
     });
+    if (!obsPlugin) require('./core/taskbar.cjs').attachTaskbar({ app, shell, ipcMain, win, test, name: 'Reward Desk', appId: product.appUserModelId });
     ipcMain.handle("command", (event, command, arg) => {
       if (
         event.sender !== win.webContents ||

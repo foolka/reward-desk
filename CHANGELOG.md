@@ -1,5 +1,11 @@
 # Изменения
 
+## 0.10.1
+
+- Added an explicit Windows taskbar pin button and live status in the standalone app settings, in RU/UK/EN. Windows asks for confirmation; unsupported systems show manual instructions.
+- Kept installer identity, executable path and shortcut icon stable across updates. A shortcut belonging to another app copy is never silently redirected.
+- Added isolated pinning tests for consent cancellation, duplicate clicks, shortcuts and trusted renderer access. OBS plugins and profiles are unchanged.
+
 ## 0.10.0 - 2026-10-20 (Standalone App)
 
 - Приложение остаётся в foolka/reward-desk; исходники и сборка OBS-плагина вынесены в отдельный foolka/reward-desk-obs.

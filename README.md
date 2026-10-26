@@ -220,3 +220,15 @@ npm run installer
 Команды используют [Channel Chat Message в EventSub](https://dev.twitch.tv/docs/eventsub/eventsub-subscription-types/#channelchatmessage) с пользовательским токеном и правом `user:read:chat`.
 
 Локальные тесты покрывают восстановление OAuth, создание/удаление наград, потерянный ответ создания и возврата, дедупликацию, выбор с весами и безопасность источника. Живое подтверждение покупки требует авторизации владельца канала и отдельного тестового использования награды.
+
+## Windows taskbar / Панель задач / Панель завдань
+
+В настройках приложения есть кнопка «Закрепить на панели задач» и статус от Windows. Запрос выполняется только по нажатию и требует подтверждения Windows. Если штатный API недоступен, закрепи значок запущенного приложения через его контекстное меню. Снятие закрепления также выполняется в этом меню.
+
+Обновляй установленную версию поверх прежней, в той же папке: имя EXE, идентификатор приложения и путь иконки сохраняются. Полное удаление или перенос в другую папку может потребовать повторного закрепления. Portable-папку после закрепления не перемещай. Если ярлык «Пуск» ведёт к другой копии, приложение предупредит и не заменит его молча.
+
+У налаштуваннях є кнопка «Закріпити на панелі завдань» зі статусом Windows. Підтвердь системний запит; якщо API недоступний, скористайся контекстним меню значка. Оновлення в тій самій папці зберігає шлях. Після перенесення portable-папки чи повного видалення може знадобитися повторне закріплення.
+
+Settings include **Pin to taskbar** with status read from Windows. Pinning requires an explicit click and Windows confirmation. Unsupported systems show manual instructions. Updates in the same installation folder retain the executable, AppUserModelID and icon path. Moving a portable folder or completely uninstalling may require pinning again. A shortcut targeting another copy is never silently overwritten.
+
+Native build prerequisite: Windows x64, MSVC and Windows SDK, plus Node-API headers (for example `npx node-gyp install --target=20.17.0`). Set `NODE_API_HEADERS` to that cache directory if using a different location. `npm run build` compiles the repository's own `native/taskbar.cpp`; no runtime imports from other Desk projects. No LAF restriction is bypassed on older Windows.
