@@ -39,6 +39,8 @@ const {
 } = require("./core/profile.cjs");
 const { readRecovery, restoreMissing } = require("./core/profile-recovery.cjs");
 const { startupNotice } = require("./core/startup-notice.cjs");
+const { startInTray } = require("./core/startup-mode.cjs");
+const trayStartup = startInTray(process.argv);
 const test = process.argv.includes("--test-mode");
 const product = require("./core/product.cjs");
 const { obsPlugin, profileName } = product;
@@ -154,7 +156,7 @@ function applyPreferences() {
   return value;
 }
 app.on("second-instance", (_, argv) => {
-  if (win && !argv.includes("--obs-plugin")) show();
+  if (win && !argv.includes("--obs-plugin") && !startInTray(argv)) show();
 });
 app
   .whenReady()
@@ -231,7 +233,7 @@ app
     });
     const icon = path.join(__dirname, "assets/icon.png");
     win = new BrowserWindow({
-      show: !obsPlugin,
+      show: !obsPlugin && !trayStartup,
       width: 1240,
       height: 860,
       minWidth: 760,
@@ -259,6 +261,7 @@ app
       applyPreferences();
       tray.on("double-click", show);
     }
+    if (!obsPlugin && trayStartup && !tray) win.show();
     win.on("close", (event) => {
       if (!closing) {
         event.preventDefault();

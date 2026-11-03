@@ -2,7 +2,9 @@
 
 Бесплатная Windows-программа FermionaPlay для звуковых и видео-наград Twitch. Прямое подключение к Twitch, без Streamer.bot и без внешнего сервера воспроизведения.
 
-[Скачать приложение 0.10.0](https://github.com/foolka/reward-desk/releases/tag/v0.10.0) · [Сайт и инструкции](https://fermionaplay.win/ru/apps/reward-desk/) · [Отдельный проект OBS-плагина](https://github.com/foolka/reward-desk-obs)
+[Скачать приложение](https://github.com/foolka/reward-desk/releases/latest) · [Сайт и инструкции](https://fermionaplay.win/ru/apps/reward-desk/) · [Отдельный проект OBS-плагина](https://github.com/foolka/reward-desk-obs)
+
+**0.10.2: запуск обычным окном или в трей из Launch Desk OBS.** Аргумент `--start-tray` оставляет значок возле часов без открытия окна; `--start-window` открывает обычное окно. Двойной щелчок по значку в трее возвращает окно. Повторный запуск в трей не раскрывает уже работающую программу. Профиль и сохранённые настройки не меняются.
 
 ## Самостоятельный Проект
 

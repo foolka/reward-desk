@@ -1,5 +1,11 @@
 # Изменения
 
+## 0.10.2 - 2026-11-03
+
+- Добавлены аргументы --start-tray и --start-window для запуска из Launch Desk OBS: скрытый запуск со значком в трее или обычное окно.
+- Повторный запрос запуска в трей не раскрывает уже работающий экземпляр. Открытие из трея по-прежнему доступно.
+- Профиль, награды, медиа, вход Twitch и ссылки OBS остаются прежними.
+
 ## 0.10.1
 
 - Added an explicit Windows taskbar pin button and live status in the standalone app settings, in RU/UK/EN. Windows asks for confirmation; unsupported systems show manual instructions.
